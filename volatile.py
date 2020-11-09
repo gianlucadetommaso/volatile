@@ -1,103 +1,127 @@
-#!/usr/bin/env python
-
-import yfinance as yf
-from clay import *
+#!/usr/bin/env python3
 import numpy as np
 import matplotlib.pyplot as plt
+import functools
+import datetime as dt
+
+import yfinance as yf
+import tensorflow as tf
+import tensorflow_probability as tfp
+from tensorflow_probability import distributions as tfd
 
 
 def load_data(tickers, start, end):
-    num_stocks = len(tickers)
+    tickers = list(set(tickers))
+    stocks = yf.Tickers(tickers)
+    df = stocks.download(start=dt.datetime.strftime(start, "%Y-%m-%d"),
+                         end=dt.datetime.strftime(end, "%Y-%m-%d"))['Close'].dropna(1)
+    missing_tickers = [tick for tick in tickers if tick not in df.columns]
+    if len(missing_tickers) > 0:
+        print('\nRemoving {} from list of symbols because yahoo-finance could not provide full information.\n'.format(
+            missing_tickers))
+    tickers = list(df.columns)
     stocks = yf.Tickers(tickers)
 
-    sector_stocks = [stocks.tickers[i].info["sector"] for i in range(num_stocks)]
-    sectors = np.unique(sector_stocks)
-    sector_ids = [np.where(sectors == sec)[0][0] for sec in sector_stocks]
+    logp = np.log(df.to_numpy().T)
+    listed = np.where(np.sum(np.isnan(logp), 1) == 0)[0].tolist()
+    logp = logp[listed]
 
-    df = stocks.download(start=start, end=end)
-    log_prices = np.log(df["Close"].to_numpy()).T
+    sector_name = []
+    for i in listed:
+        try:
+            sector_name.append(stocks.tickers[i].info["sector"])
+        except:
+            sector_name.append("NA" + str(i))
+    sectors = np.unique(sector_name)
+    sector_id = [np.where(sectors == sector)[0][0] for sector in sector_name]
 
-    return dict(dates=df.index, sector_ids=sector_ids, log_prices=log_prices)
-
-
-class StocksModel:
-    def __init__(self, data: dict):
-        self.log_prices = data["log_prices"]
-        self.sector_ids = data["sector_ids"]
-        self.num_stocks, self.t = self.log_prices.shape
-        self.num_sectors = len(np.unique(self.sector_ids))
-
-        self.order = 5
-
-    def model(self):
-        phi_s = Normal(scale=np.linspace(5 / (self.order + 1), 5, self.order + 1)[::-1],
-                       shape=(self.num_sectors, self.order + 1), name="phi_s")
-        phi = Normal(loc=embedding(self.sector_ids, phi_s), name="phi")
-        psi_s = Normal(scale=5, shape=(self.num_sectors, 1), name="psi_s")
-        psi = Normal(loc=embedding(self.sector_ids, psi_s), name="psi")
-
-        tt = np.linspace(1 / self.t, 1, self.t) ** np.arange(self.order + 1).reshape(-1, 1)
-
-        return Normal(loc=dot(phi, tt), scale=softplus(psi + 1 - tt[1]), shape=(self.num_stocks, self.t), name="y")
-
-    def posterior(self):
-        return self.model().distribution.observe(y=self.log_prices)
-
-    def estimate_sales(self, MAP):
-        llkd = self.model().distribution.observe(**MAP)
-        return dict(y=llkd.mode()["y"], std=np.sqrt(llkd.variance()["y"]))
-
-    def predict_sales(self, MAP):
-        llkd = Normal(loc=dot(MAP["phi"], np.array([1 + 1 / self.t]) ** np.arange(self.order + 1).reshape(-1, 1)),
-                      scale=softplus(MAP["psi"] + 1 / self.t),
-                      shape=(self.num_stocks, 1), name="y").distribution
-        return dict(y=llkd.mode()["y"], std=np.sqrt(llkd.variance()["y"]))
+    return dict(tickers=tickers, dates=df.index, sector_id=sector_id, logp=logp)
 
 
 def main():
-    tickers = ['TSLA', 'NCLH', 'GOOGL', 'AMZN', 'MSFT', 'FB', 'DAL', 'GILD', 'IBM', 'RCL', 'UNM']
-    train_data = load_data(tickers, start="2020-01-02", end="2020-09-09")
-    test_data = load_data(tickers, start="2020-09-10", end="2020-09-10")
-    #
-    stocks_model = StocksModel(train_data)
-    MAP = stocks_model.posterior().mode()
-    est = stocks_model.estimate_sales(MAP)
-    pred = stocks_model.predict_sales(MAP)
+    tickers = ['TSLA', 'NCLH', 'GOOGL', 'AMZN', 'MSFT', 'FB', 'DAL', 'GILD', 'IBM', 'RCL', 'UNM', 'AMRN', 'AAL',
+               'AAPL', 'AMAT', 'BP', 'CCL', 'PLAY', 'EJT1', 'EQR', 'FSLY', 'INTC', 'MSF', 'NLOK', 'OPTT', 'CKH',
+               'TSM', 'VRTX', 'VNO', 'WDI', 'WBA', 'XBIT', 'BNTX', 'PFE']
+    daydiff = 365
+    start = dt.date.today() - dt.timedelta(daydiff)
+    end = dt.date.today()
+    data = load_data(tickers, start=start, end=end)
+    tickers = data["tickers"]
+    num_sectors = len(set(data["sector_id"]))
+    num_stocks = data["logp"].shape[0]
 
-    q97_5 = 1.96
-    plt.figure(figsize=(20, 12))
+    order =  np.clip(daydiff // 30, 1, 20)
+    t = data["logp"].shape[1]
+    tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+
+    model = tfd.JointDistributionSequential([
+        # phi_s
+        tfd.Independent(tfd.Normal(loc=tf.zeros([num_sectors, 1]), scale=1), 2),
+        # phi
+        lambda phi_s: tfd.Independent(
+            tfd.Normal(loc=tf.gather(phi_s, data["sector_id"], axis=0),
+                       scale=np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]), 2),
+        # psi_s
+        tfd.Independent(tfd.Normal(loc=0, scale=tf.ones([num_sectors, 1])), 2),
+        # psi
+        lambda psi_s: tfd.Independent(tfd.Normal(loc=tf.gather(psi_s, data["sector_id"], axis=0), scale=1), 2),
+        # y
+        lambda psi, psi_s, phi: tfd.Independent(tfd.Normal(loc=tf.tensordot(phi, tt, axes=1),
+                                                           scale=tf.math.softplus(psi + 1 - tt[1])), 2)])
+
+    phi_s, phi, psi_s, psi = (tf.Variable(model.sample()[:-1][i]) for i in range(4))
+    logposterior = lambda phi_s, phi, psi_s, psi: model.log_prob([phi_s, phi, psi_s, psi, data["logp"]])
+    loss = tfp.math.minimize(lambda: -logposterior(phi_s, phi, psi_s, psi),
+                             optimizer=tf.optimizers.Adam(learning_rate=0.01),
+                             num_steps=10000)
+
+    logp_est = np.dot(phi.numpy(), tt)
+    std_logp_est = np.log(1 + np.exp(psi.numpy() + 1 - tt[1]))
+    p_est = np.exp(logp_est + std_logp_est ** 2 / 2)
+    std_p_est = np.sqrt(np.exp(2 * logp_est + std_logp_est ** 2) * (np.exp(std_logp_est ** 2) - 1))
+
+    logp_pred = np.dot(phi.numpy(), np.array(1 + 1 / t) ** np.arange(order + 1))
+    std_logp_pred = np.log(1 + np.exp(psi.numpy().squeeze() + 1 / t))
+    p_pred = np.exp(logp_pred + std_logp_pred ** 2 / 2)
+    std_p_pred = np.sqrt(np.exp(2 * logp_pred + std_logp_pred ** 2) * (np.exp(std_logp_pred ** 2) - 1))
+
+    scores = ((logp_pred - data["logp"][:, -1]) / std_logp_pred)
+    rank = np.argsort(scores)[::-1]
+    ranked_tickers = np.array(tickers)[rank]
+    ranked_p = np.exp(data["logp"])[rank]
+    ranked_p_est = p_est[rank]
+    ranked_std_p_est = std_p_est[rank]
+    ranked_p_pred = p_pred[rank]
+    ranked_std_p_pred = std_p_pred[rank]
+
+    ranked_left_est = np.maximum(0, ranked_p_est - 2 * ranked_std_p_est)
+    ranked_right_est = ranked_p_est + 2 * ranked_std_p_est
+
     num_columns = 3
-    for i in range(stocks_model.num_stocks):
-        plt.subplot(stocks_model.num_stocks // 3 + 1, num_columns, i + 1)
-        plt.title(tickers[i], fontsize=15)
-        plt.plot(train_data["dates"], train_data["log_prices"][i])
-        plt.plot(train_data["dates"], est["y"][i])
-        plt.fill_between(train_data["dates"], est["y"][i] - q97_5 * est["std"][i], est["y"][i] + q97_5 * est["std"][i],
-                         alpha=0.2)
+    fig = plt.figure(figsize=(20, num_stocks))
+    plt.suptitle("Price estimation between " + str(data["dates"][0])[:10] + " and " + str(data["dates"][-1])[:10]
+                 + " via a " + str(order) + "-order polynomial regression", y=1.03, fontsize=20)
+    for i in range(num_stocks):
+        plt.subplot(num_stocks // 3 + 1, num_columns, i + 1)
+        plt.title(ranked_tickers[i], fontsize=15)
+        plt.plot(data["dates"], ranked_p[i], label="data")
+        plt.plot(data["dates"], ranked_p_est[i], label="estimation")
+        plt.fill_between(data["dates"], ranked_left_est[i], ranked_right_est[i], alpha=0.2, label="+/- 2 st. dev.")
         plt.yticks(fontsize=12)
+        plt.xticks(rotation=45)
+        plt.legend(loc="upper left")
     plt.tight_layout()
-    plt.show()
+    figname = 'overview' + dt.datetime.strftime(end, "%Y-%m-%d") + '.png'
+    fig.savefig(figname, dpi=fig.dpi)
+    print('Overview of stocks estimation has been saved in this directory with name ' + figname)
 
-    plt.figure(figsize=(20, 10))
-    y_test = test_data["log_prices"]
-    num_columns = 5
-    for i in range(stocks_model.num_stocks):
-        plt.subplot(stocks_model.num_stocks // num_columns + 1, num_columns, i + 1)
-        plt.title(tickers[i], fontsize=15)
-
-        plt.scatter(0, pred["y"][i], color='b', marker='o')
-        plt.scatter(0, pred["y"][i] - q97_5 * pred["std"][i], color='b', marker='_')
-        plt.scatter(0, pred["y"][i] + q97_5 * pred["std"][i], color='b', marker='_')
-        plt.vlines(0, pred["y"][i] - q97_5 * pred["std"][i], pred["y"][i] + q97_5 * pred["std"][i], color='b')
-        plt.scatter(0, y_test[i], color='r')
-        plt.xlim([-1, 1])
-        plt.xticks([], [])
-        plt.yticks(fontsize=12)
-    plt.tight_layout()
-    plt.show()
-
-
-
+    print("\nBest-to-worst ranked symbol\n")
+    print("{:<8} {:<25} {:<25} {:<25}".format("symbol", "current price", "next price", "standard deviation"))
+    print(45 * "--")
+    for i in range(num_stocks):
+        print("{:<8} {:<25} {:<25} {:<25}".format(ranked_tickers[i], ranked_p[i, -1],
+                                                  ranked_p_pred[i], ranked_std_p_pred[i]))
+        print(40 * "--")
 
 
 if __name__ == '__main__':
