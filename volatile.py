@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 import numpy as np
 import matplotlib.pyplot as plt
-import functools
 import datetime as dt
+from argparse import ArgumentParser
+import csv
 
 import yfinance as yf
 import tensorflow as tf
@@ -13,8 +14,7 @@ from tensorflow_probability import distributions as tfd
 def load_data(tickers, start, end):
     tickers = list(set(tickers))
     stocks = yf.Tickers(tickers)
-    df = stocks.download(start=dt.datetime.strftime(start, "%Y-%m-%d"),
-                         end=dt.datetime.strftime(end, "%Y-%m-%d"))['Close'].dropna(1)
+    df = stocks.download(start=start, end=end)['Close'].dropna(1)
     missing_tickers = [tick for tick in tickers if tick not in df.columns]
     if len(missing_tickers) > 0:
         print('\nRemoving {} from list of symbols because yahoo-finance could not provide full information.\n'.format(
@@ -38,19 +38,25 @@ def load_data(tickers, start, end):
     return dict(tickers=tickers, dates=df.index, sector_id=sector_id, logp=logp)
 
 
-def main():
-    tickers = ['TSLA', 'NCLH', 'GOOGL', 'AMZN', 'MSFT', 'FB', 'DAL', 'GILD', 'IBM', 'RCL', 'UNM', 'AMRN', 'AAL',
-               'AAPL', 'AMAT', 'BP', 'CCL', 'PLAY', 'EJT1', 'EQR', 'FSLY', 'INTC', 'MSF', 'NLOK', 'OPTT', 'CKH',
-               'TSM', 'VRTX', 'VNO', 'WDI', 'WBA', 'XBIT', 'BNTX', 'PFE']
-    daydiff = 365
-    start = dt.date.today() - dt.timedelta(daydiff)
-    end = dt.date.today()
-    data = load_data(tickers, start=start, end=end)
+if __name__ == '__main__':
+    today = dt.date.today()
+    one_year_ago = dt.date.today() - dt.timedelta(365)
+    cli = ArgumentParser('Volatile: your day-to-day companion for financial stock trading.')
+    cli.add_argument('-s', '--symbols', type=str, nargs='+', help='List of symbols.')
+    cli.add_argument('-sd', '--start_date', type=str, default=one_year_ago.strftime("%Y-%m-%d"),
+                     help='Start collecting data from this date.')
+    cli.add_argument('-cd', '--current_date', type=str, default=today.strftime("%Y-%m-%d"),
+                     help='Collect data up to this date. Predictions will concern the next available trading day.')
+    args = cli.parse_args()
+
+    data = load_data(args.symbols, start=args.start_date, end=args.current_date)
     tickers = data["tickers"]
     num_sectors = len(set(data["sector_id"]))
     num_stocks = data["logp"].shape[0]
 
-    order =  np.clip(daydiff // 30, 1, 20)
+    num_days = (dt.datetime.strptime(args.current_date, "%Y-%m-%d").date()
+                - dt.datetime.strptime(args.start_date, "%Y-%m-%d").date()).days
+    order =  np.clip(num_days // 30, 1, 20)
     t = data["logp"].shape[1]
     tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
 
@@ -69,6 +75,7 @@ def main():
         lambda psi, psi_s, phi: tfd.Independent(tfd.Normal(loc=tf.tensordot(phi, tt, axes=1),
                                                            scale=tf.math.softplus(psi + 1 - tt[1])), 2)])
 
+    print("\nTraining the model...")
     phi_s, phi, psi_s, psi = (tf.Variable(model.sample()[:-1][i]) for i in range(4))
     logposterior = lambda phi_s, phi, psi_s, psi: model.log_prob([phi_s, phi, psi_s, psi, data["logp"]])
     loss = tfp.math.minimize(lambda: -logposterior(phi_s, phi, psi_s, psi),
@@ -111,19 +118,28 @@ def main():
         plt.xticks(rotation=45)
         plt.legend(loc="upper left")
     plt.tight_layout()
-    figname = 'overview' + dt.datetime.strftime(end, "%Y-%m-%d") + '.png'
-    fig.savefig(figname, dpi=fig.dpi)
-    print('Overview of stocks estimation has been saved in this directory with name ' + figname)
+    fig_name = 'estimation' + args.current_date + '.png'
+    fig.savefig(fig_name, dpi=fig.dpi)
+    print('\nStock estimation plots have been saved in this directory as {}.'.format(fig_name))
 
-    print("\nBest-to-worst ranked symbol\n")
+    print("\nRANKING SYMBOLS FROM MOST TO LEAST POTENTIALLY PROFITABLE")
+    print(40 * "--")
     print("{:<8} {:<25} {:<25} {:<25}".format("symbol", "current price", "next price", "standard deviation"))
-    print(45 * "--")
+    print(40 * "--")
     for i in range(num_stocks):
         print("{:<8} {:<25} {:<25} {:<25}".format(ranked_tickers[i], ranked_p[i, -1],
                                                   ranked_p_pred[i], ranked_std_p_pred[i]))
         print(40 * "--")
 
 
-if __name__ == '__main__':
-    main()
+    tab_name = 'prediction' + args.current_date + '.csv'
+    table = zip(["SYMBOLS"] + ranked_tickers.tolist(),
+                ["OBSERVED CURRENT PRICE"] + ranked_p[:, -1].tolist(),
+                ["PREDICTED NEXT PRICE"] + ranked_p_pred.tolist(),
+                ["STANDARD DEVIATION OF PREDICTION"] + ranked_std_p_pred.tolist())
+    with open(tab_name, 'w') as file:
+        wr = csv.writer(file)
+        for row in table:
+            wr.writerow(row)
+    print('\nThe prediction data printed above has been saved in this directory as {}.'.format(tab_name))
 
