@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import datetime as dt
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import csv
+import os.path
+import pandas as pd
 
 import yfinance as yf
 import tensorflow as tf
@@ -15,8 +17,6 @@ def load_data(tickers, start, end):
     tickers = list(set(tickers))
     stocks = yf.Tickers(tickers)
 
-    print('\nDownloading all available closing prices between ' + start + ' and ' + end + '...')
-
     df = stocks.download(start=start, end=end)['Close'].dropna(1)
     missing_tickers = [tick for tick in tickers if tick not in df.columns]
     if len(missing_tickers) > 0:
@@ -26,59 +26,68 @@ def load_data(tickers, start, end):
     stocks = yf.Tickers(tickers)
 
     logp = np.log(df.to_numpy().T)
-    listed = np.where(np.sum(np.isnan(logp), 1) == 0)[0].tolist()
-    logp = logp[listed]
+    # listed = np.where(np.sum(np.isnan(logp), 1) == 0)[0].tolist()
+    # logp = logp[listed]
+    # print(len(tickers), logp.shape)
+    filename = "stock_info.csv"
+    print('\nAccessing stock information. For all the symbols that you download for the first time, this can take a '
+          'while (blame yahoo-finance). Otherwise, stock information is cached into ' + filename + ' and it will be '
+          'fast.\n')
 
-    print('\nAccessing sector information...')
+    if not os.path.exists(filename):
+        with open(filename, 'w') as file:
+            wr = csv.writer(file)
+            for row in zip(["SYMBOL"], ["SECTOR"]):
+                wr.writerow(row)
+    stock_info = pd.read_csv(filename)
 
     sector_name = []
-    for i in listed:
-        try:
-            sector_name.append(stocks.tickers[i].info["sector"])
-        except:
-            sector_name.append("NA" + str(i))
+    missing_sector_info = {}
+    for i in range(len(tickers)):
+        idx = np.where(tickers[i] in stock_info["SYMBOL"].values)[0]
+        if len(idx) > 0:
+            sector_name.append(stock_info["SECTOR"][idx[0]])
+        else:
+            try:
+                sector_name.append(stocks.tickers[i].info["sector"])
+                missing_sector_info[tickers[i]] = sector_name[-1]
+            except:
+                sector_name.append("NA" + str(i))
     sectors = np.unique(sector_name)
     sector_id = [np.where(sectors == sector)[0][0] for sector in sector_name]
 
-    return dict(tickers=tickers, dates=df.index, sector_id=sector_id, logp=logp)
+    sector_info = zip(list(missing_sector_info.keys()), list(missing_sector_info.values()))
+    filename = "sector_info.csv"
+    with open(filename, 'a+', newline='') as file:
+        wr = csv.writer(file)
+        for row in sector_info:
+            wr.writerow(row)
+
+    return dict(tickers=tickers, dates=df.index.date, sector_id=sector_id, logp=logp)
 
 
 if __name__ == '__main__':
-    days_diff = 365
-    today = dt.date.today()
-    one_year_ago = dt.date.today() - dt.timedelta(days_diff)
-    cli = ArgumentParser('Volatile: your day-to-day companion for financial stock trading.',
+    cli = ArgumentParser('Volatile: your day-to-day companion   for financial stock trading.',
                          formatter_class=ArgumentDefaultsHelpFormatter)
     cli.add_argument('-s', '--symbols', type=str, nargs='+', help='List of symbols.')
-    cli.add_argument('-sd', '--start-date', type=str, default=one_year_ago.strftime("%Y-%m-%d"),
-                     help='Start collecting data from this date.')
-    cli.add_argument('-cd', '--current-date', type=str, default=today.strftime("%Y-%m-%d"),
-                     help='Collect data up to this date. Predictions will concern the next available trading day.')
-    cli.add_argument('-hz', '--horizon', type=int, default=5,
-                     help='Number of marketable dates between current date and prediction date. For example, suppose '
-                          'that in a standard week with Monday-to-Friday marketable days, the current date is on a '
-                          'Monday. Then, horizon=1 corresponds to predicting Tuesday, whereas horizon=5 corresponds to '
-                          'predicting next Monday.')
-    cli.add_argument('-o', '--order', type=int, default=None,
-                     help='Order of the polynomial regression model. If `None`, it will be set to the number of months'
-                          'between start and current date, clipped between 1 and 20.')
-    cli.add_argument('-pe', '--plot-estimation', type=bool, default=False,
+    cli.add_argument('-pe', '--plot-estimation', type=bool, default=True,
                      help='Plot estimates and uncertainty between start and current date.')
-    cli.add_argument('-sp', '--save-prediction', type=bool, default=False,
+    cli.add_argument('-sp', '--save-prediction', type=bool, default=True,
                      help='Save prediction table in csv format.')
     args = cli.parse_args()
 
-    data = load_data(args.symbols, start=args.start_date, end=args.current_date)
+    today = dt.date.today().strftime("%Y-%m-%d")
+    tomorrow = (dt.date.today() + dt.timedelta(1)).strftime("%Y-%m-%d")
+    one_year_ago = (dt.date.today() - dt.timedelta(365)).strftime("%Y-%m-%d")
+
+    print('\nDownloading all available closing prices between ' + one_year_ago + ' and ' + today + '...')
+    data = load_data(args.symbols, start=one_year_ago, end=tomorrow)
     tickers = data["tickers"]
     num_sectors = len(set(data["sector_id"]))
     num_stocks = data["logp"].shape[0]
 
-    if args.order is None:
-        num_days = (dt.datetime.strptime(args.current_date, "%Y-%m-%d").date()
-                    - dt.datetime.strptime(args.start_date, "%Y-%m-%d").date()).days
-        order =  np.clip(num_days // 30, 1, 20)
-    else:
-        order = args.order
+    order = 12
+    horizon = 5
 
     t = data["logp"].shape[1]
     tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
@@ -99,7 +108,7 @@ if __name__ == '__main__':
                                                            scale=tf.math.softplus(psi + 1 - tt[1])), 2)])
 
     print("\nTraining the model...")
-    tt_pred = np.arange(1 + args.horizon) / t
+    tt_pred = np.arange(1 + horizon) / t
 
     attempt = 0
     while attempt < 2:
@@ -120,7 +129,7 @@ if __name__ == '__main__':
         p_pred = np.exp(logp_pred + std_logp_pred ** 2 / 2)
         std_p_pred = np.sqrt(np.exp(2 * logp_pred + std_logp_pred ** 2) * (np.exp(std_logp_pred ** 2) - 1))
 
-        scores = ((logp_pred[:, args.horizon] - data["logp"][:, -1]) / std_logp_pred[:, args.horizon])
+        scores = ((logp_pred[:, horizon] - data["logp"][:, -1]) / std_logp_pred[:, horizon])
 
         if np.max(np.abs(scores) > 5):
             attempt += 1
@@ -141,9 +150,9 @@ if __name__ == '__main__':
         ranked_right_est = ranked_p_est + 2 * ranked_std_p_est
 
         num_columns = 3
-        fig = plt.figure(figsize=(20, num_stocks))
+        fig = plt.figure(figsize=(20, max(num_stocks, 3)))
         plt.suptitle("Price estimation between " + str(data["dates"][0])[:10] + " and " + str(data["dates"][-1])[:10]
-                     + " via a " + str(order) + "-order polynomial regression", y=1.03, fontsize=20)
+                     + " via a " + str(order) + "-order polynomial regression", y=1.01, fontsize=20)
         for i in range(num_stocks):
             plt.subplot(num_stocks // 3 + 1, num_columns, i + 1)
             plt.title(ranked_tickers[i], fontsize=15)
@@ -154,35 +163,35 @@ if __name__ == '__main__':
             plt.xticks(rotation=45)
             plt.legend(loc="upper left")
         plt.tight_layout()
-        fig_name = 'estimation' + args.current_date + '.png'
+        fig_name = 'estimation_plots_' + today + '.png'
         fig.savefig(fig_name, dpi=fig.dpi)
         print('\nStock estimation plots have been saved in this directory as {}.'.format(fig_name))
 
     st = {"STRONG BUY": 3, "BUY": 2, "NEUTRAL": 0, "SELL": -2, "STRONG SELL": -3}
-    si = {"STRONG BUY": np.where(ranked_scores > st["STRONG BUY"])[0][0],
-              "BUY": np.where((ranked_scores <= st["STRONG BUY"]) & (ranked_scores > st["BUY"]))[0][0],
-              "NEUTRAL": np.where((ranked_scores <= st["BUY"]) & (ranked_scores > st["SELL"]))[0][0],
-              "SELL": np.where((ranked_scores <= st["SELL"]) & (ranked_scores > st["STRONG SELL"]))[0][0],
-              "STRONG SELL": np.where(ranked_scores <= st["STRONG SELL"])[0][0]}
-    print(ranked_scores)
+    si = {"STRONG BUY": np.where(ranked_scores > st["STRONG BUY"])[0],
+              "BUY": np.where((ranked_scores <= st["STRONG BUY"]) & (ranked_scores > st["BUY"]))[0],
+              "NEUTRAL": np.where((ranked_scores <= st["BUY"]) & (ranked_scores > st["SELL"]))[0],
+              "SELL": np.where((ranked_scores <= st["SELL"]) & (ranked_scores > st["STRONG SELL"]))[0],
+              "STRONG SELL": np.where(ranked_scores <= st["STRONG SELL"])[0]}
+    si = {k: v[0] for k, v in si.items() if len(v) > 0}
+    ranked_rating = np.array(list(si.keys())).repeat(list(np.diff(list(si.values()))) + [num_stocks - list(si.values())[-1]]).tolist()
     print("\nRANKING SYMBOLS FROM MOST TO LEAST POTENTIALLY PROFITABLE")
-    print(40 * "--")
-    print("{:<8} {:<25} {:<25} {:<25}".format("symbol", "current price", "next price", "standard deviation"))
-    print(40 * "--")
+    print(56 * "--")
+    print("{:<11} {:<25} {:<25} {:<37} {:<15}".format("SYMBOL", "PRICE ON " + str(data["dates"][-1]), "PREDICTED NEXT PRICE",
+                                              "STANDARD DEVIATION OF PREDICTION", "RATING"))
+    print(56 * "--")
     for i in range(num_stocks):
-        if i in si.values():
-            print(list(si.keys())[list(si.values()).index(i)], sep="")
-            print(40 * "--")
-        print("{:<8} {:<25} {:<25} {:<25}".format(ranked_tickers[i], ranked_p[i, -1],
-                                                  ranked_p_pred[i, args.horizon], ranked_std_p_pred[i, args.horizon]))
-        print(40 * "--")
+        print("{:<11} {:<25} {:<25} {:<37} {:<15}".format(ranked_tickers[i], ranked_p[i, -1],
+                                                  ranked_p_pred[i, 1], ranked_std_p_pred[i, 1], ranked_rating[i]))
+        print(56 * "--")
 
     if args.save_prediction:
-        tab_name = 'prediction' + args.current_date + '.csv'
+        tab_name = 'prediction_data_' + today + '.csv'
         table = zip(["SYMBOLS"] + ranked_tickers.tolist(),
-                    ["OBSERVED CURRENT PRICE"] + ranked_p[:, -1].tolist(),
-                    ["PREDICTED NEXT PRICE"] + ranked_p_pred[:, args.horizon].tolist(),
-                    ["STANDARD DEVIATION OF PREDICTION"] + ranked_std_p_pred[:, args.horizon].tolist())
+                    ["PRICE ON " + str(data["dates"][-1])] + ranked_p[:, -1].tolist(),
+                    ["PREDICTED NEXT PRICE"] + ranked_p_pred[:, 1].tolist(),
+                    ["STANDARD DEVIATION OF PREDICTION"] + ranked_std_p_pred[:, 1].tolist(),
+                    ["RATING"] + ranked_rating)
         with open(tab_name, 'w') as file:
             wr = csv.writer(file)
             for row in table:
