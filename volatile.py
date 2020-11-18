@@ -13,25 +13,22 @@ import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
 
 
-def load_data(tickers, start, end):
+def load_data(tickers):
     tickers = list(set(tickers))
-    stocks = yf.Tickers(tickers)
+    df = yf.download(tickers, period="1y")['Close'].fillna(method='bfill').drop_duplicates()
+    df = df.dropna(1) if len(tickers) > 1 else pd.DataFrame(df.dropna()).rename(columns={"Close": tickers[0]})
 
-    df = stocks.download(start=start, end=end)['Close'].dropna(1)
     missing_tickers = [tick for tick in tickers if tick not in df.columns]
     if len(missing_tickers) > 0:
-        print('\nRemoving {} from list of symbols because yahoo-finance could not provide full information.'.format(
+        print('\nRemoving {} from list of symbols because yfinance could not provide full information.'.format(
             missing_tickers))
-    tickers = list(df.columns)
-    stocks = yf.Tickers(tickers)
-
+        tickers = list(df.columns)
+        stocks = yf.Tickers(tickers)
     logp = np.log(df.to_numpy().T)
-    # listed = np.where(np.sum(np.isnan(logp), 1) == 0)[0].tolist()
-    # logp = logp[listed]
-    # print(len(tickers), logp.shape)
+
     filename = "stock_info.csv"
     print('\nAccessing stock information. For all the symbols that you download for the first time, this can take a '
-          'while (blame yahoo-finance). Otherwise, stock information is cached into ' + filename + ' and it will be '
+          'while (blame yfinance). Otherwise, stock information is cached into ' + filename + ' and it will be '
           'fast.\n')
 
     if not os.path.exists(filename):
@@ -56,32 +53,30 @@ def load_data(tickers, start, end):
     sectors = np.unique(sector_name)
     sector_id = [np.where(sectors == sector)[0][0] for sector in sector_name]
 
-    sector_info = zip(list(missing_sector_info.keys()), list(missing_sector_info.values()))
-    filename = "sector_info.csv"
+    stock_info = zip(list(missing_sector_info.keys()), list(missing_sector_info.values()))
+
     with open(filename, 'a+', newline='') as file:
         wr = csv.writer(file)
-        for row in sector_info:
+        for row in stock_info:
             wr.writerow(row)
 
-    return dict(tickers=tickers, dates=df.index.date, sector_id=sector_id, logp=logp)
+    return dict(tickers=tickers, dates=pd.to_datetime(df.index).date, sector_id=sector_id, logp=logp)
 
 
 if __name__ == '__main__':
     cli = ArgumentParser('Volatile: your day-to-day companion   for financial stock trading.',
                          formatter_class=ArgumentDefaultsHelpFormatter)
     cli.add_argument('-s', '--symbols', type=str, nargs='+', help='List of symbols.')
-    cli.add_argument('-pe', '--plot-estimation', type=bool, default=True,
+    cli.add_argument('-pe', '--plot-estimation', type=bool, default=False,
                      help='Plot estimates and uncertainty between start and current date.')
-    cli.add_argument('-sp', '--save-prediction', type=bool, default=True,
+    cli.add_argument('-sp', '--save-prediction', type=bool, default=False,
                      help='Save prediction table in csv format.')
     args = cli.parse_args()
 
     today = dt.date.today().strftime("%Y-%m-%d")
-    tomorrow = (dt.date.today() + dt.timedelta(1)).strftime("%Y-%m-%d")
-    one_year_ago = (dt.date.today() - dt.timedelta(365)).strftime("%Y-%m-%d")
 
-    print('\nDownloading all available closing prices between ' + one_year_ago + ' and ' + today + '...')
-    data = load_data(args.symbols, start=one_year_ago, end=tomorrow)
+    print('\nDownloading all available closing prices in the last year...')
+    data = load_data(args.symbols)
     tickers = data["tickers"]
     num_sectors = len(set(data["sector_id"]))
     num_stocks = data["logp"].shape[0]
@@ -91,14 +86,16 @@ if __name__ == '__main__':
 
     t = data["logp"].shape[1]
     tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+    tt_scale = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
+    tt_pred = np.arange(1 + horizon) / t
 
     model = tfd.JointDistributionSequential([
+        # phi_m
+        tfd.Independent(tfd.Normal(loc=tf.zeros([1, order + 1]), scale=tt_scale), 2),
         # phi_s
-        tfd.Independent(tfd.Normal(loc=tf.zeros([num_sectors, 1]), scale=1), 2),
+        tfd.Independent(tfd.Normal(loc=tf.zeros([num_sectors, order + 1]), scale=0.5 * tt_scale), 2),
         # phi
-        lambda phi_s: tfd.Independent(
-            tfd.Normal(loc=tf.gather(phi_s, data["sector_id"], axis=0),
-                       scale=np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]), 2),
+        lambda phi_s: tfd.Independent(tfd.Normal(loc=tf.gather(phi_s, data["sector_id"], axis=0), scale=0.25 * tt_scale), 2),
         # psi_s
         tfd.Independent(tfd.Normal(loc=0, scale=tf.ones([num_sectors, 1])), 2),
         # psi
@@ -108,13 +105,12 @@ if __name__ == '__main__':
                                                            scale=tf.math.softplus(psi + 1 - tt[1])), 2)])
 
     print("\nTraining the model...")
-    tt_pred = np.arange(1 + horizon) / t
 
     attempt = 0
     while attempt < 2:
-        phi_s, phi, psi_s, psi = (tf.Variable(model.sample()[:-1][i]) for i in range(4))
-        log_posterior = lambda phi_s, phi, psi_s, psi: model.log_prob([phi_s, phi, psi_s, psi, data["logp"]])
-        loss = tfp.math.minimize(lambda: -log_posterior(phi_s, phi, psi_s, psi),
+        phi_m, phi_s, phi, psi_s, psi = (tf.Variable(model.sample()[:-1][i]) for i in range(5))
+        log_posterior = lambda phi_m, phi_s, phi, psi_s, psi: model.log_prob([phi_m, phi_s, phi, psi_s, psi, data["logp"]])
+        loss = tfp.math.minimize(lambda: -log_posterior(phi_m, phi_s, phi, psi_s, psi),
                                  optimizer=tf.optimizers.Adam(learning_rate=0.01),
                                  num_steps=10000)
 
