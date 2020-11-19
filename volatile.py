@@ -15,7 +15,7 @@ from tensorflow_probability import distributions as tfd
 
 def load_data(tickers):
     tickers = list(set(tickers))
-    df = yf.download(tickers, period="1y")['Close'].fillna(method='bfill').drop_duplicates()
+    df = yf.download(tickers, period="1y")['Close'].fillna(method='ffill').drop_duplicates()
     df = df.dropna(1) if len(tickers) > 1 else pd.DataFrame(df.dropna()).rename(columns={"Close": tickers[0]})
 
     missing_tickers = [tick for tick in tickers if tick not in df.columns]
@@ -27,9 +27,8 @@ def load_data(tickers):
     logp = np.log(df.to_numpy().T)
 
     filename = "stock_info.csv"
-    print('\nAccessing stock information. For all the symbols that you download for the first time, this can take a '
-          'while (blame yfinance). Otherwise, stock information is cached into ' + filename + ' and it will be '
-          'fast.\n')
+    print('\nAccessing stock information. For all symbols that you download for the first time, this can take a '
+          'while. Otherwise, stock information is cached into ' + filename + ' and accessing it will be fast.\n')
 
     if not os.path.exists(filename):
         with open(filename, 'w') as file:
@@ -41,7 +40,7 @@ def load_data(tickers):
     sector_name = []
     missing_sector_info = {}
     for i in range(len(tickers)):
-        idx = np.where(tickers[i] in stock_info["SYMBOL"].values)[0]
+        idx = np.where(stock_info["SYMBOL"].values == tickers[i])[0]
         if len(idx) > 0:
             sector_name.append(stock_info["SECTOR"][idx[0]])
         else:
@@ -60,14 +59,14 @@ def load_data(tickers):
         for row in stock_info:
             wr.writerow(row)
 
-    return dict(tickers=tickers, dates=pd.to_datetime(df.index).date, sector_id=sector_id, logp=logp)
+    return dict(tickers=tickers, dates=pd.to_datetime(df.index).date, sectors=sectors, sector_id=sector_id, logp=logp)
 
 
 if __name__ == '__main__':
     cli = ArgumentParser('Volatile: your day-to-day companion   for financial stock trading.',
                          formatter_class=ArgumentDefaultsHelpFormatter)
     cli.add_argument('-s', '--symbols', type=str, nargs='+', help='List of symbols.')
-    cli.add_argument('-pe', '--plot-estimation', type=bool, default=False,
+    cli.add_argument('-pe', '--plot-estimation', type=bool, default=True,
                      help='Plot estimates and uncertainty between start and current date.')
     cli.add_argument('-sp', '--save-prediction', type=bool, default=False,
                      help='Save prediction table in csv format.')
@@ -90,8 +89,6 @@ if __name__ == '__main__':
     tt_pred = np.arange(1 + horizon) / t
 
     model = tfd.JointDistributionSequential([
-        # phi_m
-        tfd.Independent(tfd.Normal(loc=tf.zeros([1, order + 1]), scale=tt_scale), 2),
         # phi_s
         tfd.Independent(tfd.Normal(loc=tf.zeros([num_sectors, order + 1]), scale=0.5 * tt_scale), 2),
         # phi
@@ -108,9 +105,9 @@ if __name__ == '__main__':
 
     attempt = 0
     while attempt < 2:
-        phi_m, phi_s, phi, psi_s, psi = (tf.Variable(model.sample()[:-1][i]) for i in range(5))
-        log_posterior = lambda phi_m, phi_s, phi, psi_s, psi: model.log_prob([phi_m, phi_s, phi, psi_s, psi, data["logp"]])
-        loss = tfp.math.minimize(lambda: -log_posterior(phi_m, phi_s, phi, psi_s, psi),
+        phi_s, phi, psi_s, psi = (tf.Variable(model.sample()[:-1][i]) for i in range(4))
+        log_posterior = lambda phi_s, phi, psi_s, psi: model.log_prob([phi_s, phi, psi_s, psi, data["logp"]])
+        loss = tfp.math.minimize(lambda: -log_posterior(phi_s, phi, psi_s, psi),
                                  optimizer=tf.optimizers.Adam(learning_rate=0.01),
                                  num_steps=10000)
 
@@ -132,6 +129,8 @@ if __name__ == '__main__':
         else:
             break
 
+    print("Training completed.")
+
     rank = np.argsort(scores)[::-1]
     ranked_tickers = np.array(tickers)[rank]
     ranked_scores = scores[rank]
@@ -141,7 +140,41 @@ if __name__ == '__main__':
     ranked_p_pred = p_pred[rank]
     ranked_std_p_pred = std_p_pred[rank]
 
+    logp_sec_est = np.dot(phi_s.numpy(), tt)
+    std_logp_sec_est = np.log(1 + np.exp(psi_s.numpy() + 1 - tt[1]))
+    p_sec_est = np.exp(logp_sec_est + std_logp_sec_est ** 2 / 2)
+    std_p_sec_est = np.sqrt(np.exp(2 * logp_sec_est + std_logp_sec_est ** 2) * (np.exp(std_logp_sec_est ** 2) - 1))
+
     if args.plot_estimation:
+        print('\nPlotting sector estimation...')
+        NA_sectors = np.where(np.array([sec[:2] for sec in data["sectors"]]) == "NA")[0]
+        num_NA_sectors = len(NA_sectors)
+
+        left_sec_est = np.maximum(0, p_sec_est - std_p_sec_est)
+        right_sec_est = p_sec_est + std_p_sec_est
+
+        num_columns = 3
+        fig = plt.figure(figsize=(20, 2 * max(num_sectors - num_NA_sectors, 3)))
+        plt.suptitle("Sector estimation between " + str(data["dates"][0])[:10] + " and " + str(data["dates"][-1])[:10]
+                     + " via a " + str(order) + "-order polynomial regression", y=1.01, fontsize=20)
+        j = 0
+        for i in range(num_sectors):
+            if i not in NA_sectors:
+                j += 1
+                plt.subplot((num_sectors - num_NA_sectors) // num_columns + 1, num_columns, j)
+                plt.title(data["sectors"][i], fontsize=15)
+                plt.plot(data["dates"], p_sec_est[i], label=" sector estimation", color="C1")
+                plt.fill_between(data["dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 1 st. dev.", color="C0")
+                plt.yticks(fontsize=12)
+                plt.xticks(rotation=45)
+                plt.legend(loc="upper left")
+        plt.tight_layout()
+        fig_name = today + '_sector_estimation_plots.png'
+        fig.savefig(fig_name, dpi=fig.dpi)
+        print('Sector estimation plots have been saved in this directory as {}.'.format(fig_name))
+
+    if args.plot_estimation:
+        print('\nPlotting stock estimation...')
         ranked_left_est = np.maximum(0, ranked_p_est - 2 * ranked_std_p_est)
         ranked_right_est = ranked_p_est + 2 * ranked_std_p_est
 
@@ -150,7 +183,7 @@ if __name__ == '__main__':
         plt.suptitle("Price estimation between " + str(data["dates"][0])[:10] + " and " + str(data["dates"][-1])[:10]
                      + " via a " + str(order) + "-order polynomial regression", y=1.01, fontsize=20)
         for i in range(num_stocks):
-            plt.subplot(num_stocks // 3 + 1, num_columns, i + 1)
+            plt.subplot(num_stocks // num_columns + 1, num_columns, i + 1)
             plt.title(ranked_tickers[i], fontsize=15)
             plt.plot(data["dates"], ranked_p[i], label="data")
             plt.plot(data["dates"], ranked_p_est[i], label="estimation")
@@ -159,9 +192,9 @@ if __name__ == '__main__':
             plt.xticks(rotation=45)
             plt.legend(loc="upper left")
         plt.tight_layout()
-        fig_name = 'estimation_plots_' + today + '.png'
+        fig_name = today + '_stock_estimation_plots.png'
         fig.savefig(fig_name, dpi=fig.dpi)
-        print('\nStock estimation plots have been saved in this directory as {}.'.format(fig_name))
+        print('Stock estimation plots have been saved in this directory as {}.'.format(fig_name))
 
     st = {"STRONG BUY": 3, "BUY": 2, "NEUTRAL": 0, "SELL": -2, "STRONG SELL": -3}
     si = {"STRONG BUY": np.where(ranked_scores > st["STRONG BUY"])[0],
