@@ -15,7 +15,9 @@ from tensorflow_probability import distributions as tfd
 
 def load_data(tickers):
     tickers = list(set(tickers))
-    df = yf.download(tickers, period="1y")['Close'].fillna(method='ffill').drop_duplicates()
+    df = yf.download(tickers, period="1y")['Close']
+    df.drop(columns=df.columns[np.where((df.isnull().sum(0) > df.shape[0] // 2 + 1) == True)[0]], inplace=True)
+    df = df.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
     df = df.dropna(1) if len(tickers) > 1 else pd.DataFrame(df.dropna()).rename(columns={"Close": tickers[0]})
 
     missing_tickers = [tick for tick in tickers if tick not in df.columns]
@@ -80,8 +82,10 @@ if __name__ == '__main__':
     num_sectors = len(set(data["sector_id"]))
     num_stocks = data["logp"].shape[0]
 
-    order = 12
     horizon = 5
+    order = 12
+
+    print("\nTraining the model...\n")
 
     t = data["logp"].shape[1]
     tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
@@ -100,8 +104,6 @@ if __name__ == '__main__':
         # y
         lambda psi, psi_s, phi: tfd.Independent(tfd.Normal(loc=tf.tensordot(phi, tt, axes=1),
                                                            scale=tf.math.softplus(psi + 1 - tt[1])), 2)])
-
-    print("\nTraining the model...")
 
     attempt = 0
     while attempt < 2:
@@ -129,7 +131,7 @@ if __name__ == '__main__':
         else:
             break
 
-    print("Training completed.")
+    print("\nTraining completed.")
 
     rank = np.argsort(scores)[::-1]
     ranked_tickers = np.array(tickers)[rank]
