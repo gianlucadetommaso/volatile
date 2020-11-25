@@ -76,7 +76,7 @@ def define_model(tt, tt_scale):
            # psi_s
            tfd.Independent(tfd.Normal(loc=0, scale=tf.ones([num_sectors, 1])), 2),
            # psi
-           lambda psi_s: tfd.Independent(tfd.Normal(loc=tf.gather(psi_s, data["sector_id"], axis=0), scale=1), 2),
+           lambda psi_s: tfd.Independent(tfd.Normal(loc=tf.gather(psi_s, data["sector_id"], axis=0), scale=0.5), 2),
            # y
            lambda psi, psi_s, phi: tfd.Independent(tfd.Normal(loc=tf.tensordot(phi, tt, axes=1),
                                                               scale=tf.math.softplus(psi + 1 - tt[1])), 2)])

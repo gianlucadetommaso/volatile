@@ -1,0 +1,296 @@
+SYMBOL,SECTOR
+AAL,Industrials
+AAPL,Technology
+ACB,Healthcare
+ADBE,Technology
+ADS,Financial Services
+AMAT,Technology
+AMD,Technology
+AMRN,Healthcare
+AMZN,Consumer Cyclical
+ANET,Technology
+APHA,Healthcare
+ATVI,Communication Services
+AZN,Healthcare
+BABA,Consumer Cyclical
+BAC,Financial Services
+BDX,Healthcare
+BKNG,Consumer Cyclical
+BNTX,Healthcare
+BP,Energy
+C,Financial Services
+CCL,Consumer Cyclical
+CGC,Healthcare
+CKH,Energy
+CRM,Technology
+CRWD,Technology
+CSCO,Technology
+CSIQ,Technology
+CWEN,Utilities
+DAL,Industrials
+DDOG,Technology
+DELL,Technology
+DKNG,Consumer Cyclical
+DOCU,Technology
+DUK,Utilities
+DXCM,Healthcare
+EQR,Real Estate
+FB,Communication Services
+FDX,Industrials
+FSLY,Technology
+FTNT,Technology
+GILD,Healthcare
+GOOGL,Communication Services
+GRWG,Consumer Cyclical
+GS,Financial Services
+IBM,Technology
+IIPR,Real Estate
+INTC,Technology
+JD,Consumer Cyclical
+JNJ,Healthcare
+JPM,Financial Services
+KO,Consumer Defensive
+LSCC,Technology
+LULU,Consumer Cyclical
+LZAGY,Healthcare
+MA,Financial Services
+MGM,Consumer Cyclical
+MRNA,Healthcare
+MS,Financial Services
+MSFT,Technology
+MYL,Healthcare
+NCLH,Consumer Cyclical
+NEE,Utilities
+NEP,Utilities
+NKE,Consumer Cyclical
+NLOK,Technology
+NSRGF,Consumer Defensive
+NVDA,Technology
+ORCL,Technology
+PANW,Technology
+PEP,Consumer Defensive
+PFE,Healthcare
+PG,Consumer Defensive
+PLAY,Consumer Cyclical
+PYPL,Financial Services
+QCOM,Technology
+RCL,Consumer Cyclical
+RHHVF,Healthcare
+RY,Financial Services
+SAP,Technology
+SE,Communication Services
+SHOP,Technology
+SIMO,Technology
+SNE,Technology
+SPGI,Financial Services
+SQ,Technology
+SSNC,Technology
+SWKS,Technology
+TDOC,Healthcare
+TLRY,Healthcare
+TM,Consumer Cyclical
+TMUS,Communication Services
+TPIC,Industrials
+TSLA,Consumer Cyclical
+TSM,Technology
+TXN,Technology
+UAL,Industrials
+UBER,Technology
+UNH,Healthcare
+UNM,Financial Services
+V,Financial Services
+VFF,Consumer Defensive
+VNO,Real Estate
+VRTX,Healthcare
+WBA,Healthcare
+WMT,Consumer Defensive
+XBIT,Healthcare
+XOM,Energy
+ZM,Communication Services
+ABEO,Healthcare
+ABT,Healthcare
+EXAS,Healthcare
+ORGO,Healthcare
+BDN,Real Estate
+BPYU,Real Estate
+ENB,Energy
+SLG,Real Estate
+STNE,Technology
+ISRG,Healthcare
+WMB,Energy
+AAPL,Technology
+GOOGL,Communication Services
+AAL,Industrials
+AAPL,Technology
+ABEO,Healthcare
+ABT,Healthcare
+ACB,Healthcare
+ADBE,Technology
+ADS,Financial Services
+AMAT,Technology
+AMD,Technology
+AMRN,Healthcare
+AMZN,Consumer Cyclical
+ANET,Technology
+APHA,Healthcare
+ATVI,Communication Services
+AZN,Healthcare
+BABA,Consumer Cyclical
+BAC,Financial Services
+BDN,Real Estate
+BDX,Healthcare
+BKNG,Consumer Cyclical
+BP,Energy
+BPYU,Real Estate
+C,Financial Services
+CCL,Consumer Cyclical
+CGC,Healthcare
+CKH,Energy
+CRM,Technology
+CRWD,Technology
+CSCO,Technology
+CSIQ,Technology
+CWEN,Utilities
+DAL,Industrials
+DDOG,Technology
+DELL,Technology
+DKNG,Consumer Cyclical
+DOCU,Technology
+DUK,Utilities
+DXCM,Healthcare
+ENB,Energy
+EQR,Real Estate
+EXAS,Healthcare
+FB,Communication Services
+FDX,Industrials
+FSLY,Technology
+GILD,Healthcare
+GOOGL,Communication Services
+GRWG,Consumer Cyclical
+GS,Financial Services
+IBM,Technology
+IIPR,Real Estate
+INTC,Technology
+ISRG,Healthcare
+JD,Consumer Cyclical
+JNJ,Healthcare
+JPM,Financial Services
+KO,Consumer Defensive
+LSCC,Technology
+LULU,Consumer Cyclical
+LZAGY,Healthcare
+MA,Financial Services
+MGM,Consumer Cyclical
+MRNA,Healthcare
+MS,Financial Services
+MSFT,Technology
+MYL,Healthcare
+NCLH,Consumer Cyclical
+NEE,Utilities
+NEP,Utilities
+NKE,Consumer Cyclical
+NLOK,Technology
+NSRGF,Consumer Defensive
+NVDA,Technology
+ORCL,Technology
+ORGO,Healthcare
+PANW,Technology
+PEP,Consumer Defensive
+PFE,Healthcare
+PG,Consumer Defensive
+PLAY,Consumer Cyclical
+PYPL,Financial Services
+QCOM,Technology
+RCL,Consumer Cyclical
+RHHVF,Healthcare
+RY,Financial Services
+SAP,Technology
+SE,Communication Services
+SHOP,Technology
+SIMO,Technology
+SLG,Real Estate
+SNE,Technology
+SPGI,Financial Services
+SQ,Technology
+SSNC,Technology
+STNE,Technology
+SWKS,Technology
+TDOC,Healthcare
+TLRY,Healthcare
+TM,Consumer Cyclical
+TMUS,Communication Services
+TPIC,Industrials
+TSLA,Consumer Cyclical
+TSM,Technology
+TXN,Technology
+UAL,Industrials
+UBER,Technology
+UNH,Healthcare
+UNM,Financial Services
+V,Financial Services
+VFF,Consumer Defensive
+VNO,Real Estate
+VRTX,Healthcare
+WBA,Healthcare
+WMB,Energy
+WMT,Consumer Defensive
+XBIT,Healthcare
+XOM,Energy
+ZM,Communication Services
+OPTT,Industrials
+ALXN,Healthcare
+AVLR,Technology
+GTBIF,Healthcare
+PINS,Communication Services
+PTON,Consumer Cyclical
+SIRI,Communication Services
+WIX,Technology
+ARD,Consumer Cyclical
+BERY,Consumer Cyclical
+BHF,Financial Services
+NRG,Utilities
+QDEL,Healthcare
+ERJ,Industrials
+UIS,Technology
+URG,Energy
+VHC,Technology
+PSX,Energy
+CJPRY,Industrials
+CSX,Industrials
+GBX,Industrials
+INVA,Healthcare
+SBSW,Basic Materials
+SNY,Healthcare
+VNDA,Healthcare
+JKS,Technology
+REGI,Energy
+BIIB,Healthcare
+SUPN,Healthcare
+NNDM,Technology
+WWR,Basic Materials
+BIDU,Communication Services
+BILI,Communication Services
+NIU,Consumer Cyclical
+PNC,Financial Services
+TSN,Consumer Defensive
+AESE,Communication Services
+ASRT,Healthcare
+BOXL,Technology
+PPSI,Industrials
+TANH,Consumer Defensive
+DQ,Technology
+HAVLF,Healthcare
+ABEV,Consumer Defensive
+BRK-B,Financial Services
+NFLX,Communication Services
+PCG,Utilities
+PRTY,Consumer Cyclical
+DIS,Communication Services
+GOOS,Consumer Cyclical
+HSY,Consumer Defensive
+MO,Consumer Defensive
+PDD,Consumer Cyclical
+TAP,Consumer Defensive
+TTD,Technology
+WDC,Technology
+WM,Industrials
