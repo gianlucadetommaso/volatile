@@ -177,7 +177,7 @@ if __name__ == '__main__':
                 plt.xticks(rotation=45)
                 plt.legend(loc="upper left")
         plt.tight_layout()
-        fig_name = today + '_sector_estimation_plots.png'
+        fig_name = 'sector_estimation_plots.png'
         fig.savefig(fig_name, dpi=fig.dpi)
         print('Sector estimation plots have been saved in this directory as {}.'.format(fig_name))
 
@@ -196,7 +196,7 @@ if __name__ == '__main__':
             plt.xticks(rotation=45)
             plt.legend(loc="upper left")
         plt.tight_layout()
-        fig_name = today + '_stock_estimation_plots.png'
+        fig_name = 'stock_estimation_plots.png'
         fig.savefig(fig_name, dpi=fig.dpi)
         print('Stock estimation plots have been saved in this directory as {}.'.format(fig_name))
 
@@ -210,7 +210,7 @@ if __name__ == '__main__':
     ranked_rating = np.array(list(si.keys())).repeat(list(np.diff(list(si.values()))) + [num_stocks - list(si.values())[-1]]).tolist()
     print("\nPREDICTION TABLE")
     print(56 * "--")
-    print("{:<11} {:<25} {:<25} {:<37} {:<15}".format("SYMBOL", "PRICE ON " + str(data["dates"][-1]), "PREDICTED NEXT PRICE",
+    print("{:<11} {:<25} {:<25} {:<37} {:<15}".format("SYMBOL", "PRICE ON " + str(data["dates"][-1]), "PREDICTED PRICE NEXT DAY",
                                               "STANDARD DEVIATION OF PREDICTION", "RATING"))
     print(56 * "--")
     for i in range(num_stocks):
@@ -219,10 +219,10 @@ if __name__ == '__main__':
         print(56 * "--")
 
     if args.save_prediction_table:
-        tab_name = today + '_prediction_table.csv'
+        tab_name = 'prediction_table.csv'
         table = zip(["SYMBOLS"] + ranked_tickers.tolist(),
                     ["PRICE ON " + str(data["dates"][-1])] + ranked_p[:, -1].tolist(),
-                    ["PREDICTED NEXT PRICE"] + ranked_p_pred[:, 1].tolist(),
+                    ["PREDICTED PRICE NEXT DAY"] + ranked_p_pred[:, 1].tolist(),
                     ["STANDARD DEVIATION OF PREDICTION"] + ranked_std_p_pred[:, 1].tolist(),
                     ["RATING"] + ranked_rating)
         with open(tab_name, 'w') as file:
