@@ -132,9 +132,9 @@ def training(phi_s, phi, psi_s, psi, model, logp, learning_rate = 0.01, num_step
     phi: tf.Tensor
         Initial values of stock-level polynomial parameters.
     psi_s: tf.Tensor
-        Initial values of sector-level polynomial parameters.
+        Initial values of sector-level likelihood scale parameters.
     psi: tf.Tensor
-        Initial values of stock-level polynomial parameters.
+        Initial values of stock-level likelihood scale parameters.
     model: tfd.JointDistributionSequential
         Graphical model to train.
     logp: np.array
