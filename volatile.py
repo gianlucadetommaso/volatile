@@ -108,29 +108,37 @@ def define_model(tt: np.array, order_scale: np.array):
         It reweighs prior scales of parameters at different orders of the polynomial.
     """
     return tfd.JointDistributionSequential([
+           # phi_m
+           tfd.Independent(tfd.Normal(loc=tf.zeros([1, order + 1]), scale=2 * order_scale), 2),
            # phi_s
-           tfd.Independent(tfd.Normal(loc=tf.zeros([num_sectors, order + 1]), scale=order_scale), 2),
+           lambda phi_m: tfd.Independent(tfd.Normal(loc=tf.repeat(phi_m, num_sectors, axis=0), scale=order_scale), 2),
            # phi
            lambda phi_s: tfd.Independent(tfd.Normal(loc=tf.gather(phi_s, data["sector_id"], axis=0),
                                                     scale=0.5 * order_scale), 2),
+           # psi_m
+           tfd.Normal(loc=0, scale=2),
            # psi_s
-           tfd.Independent(tfd.Normal(loc=0, scale=tf.ones([num_sectors, 1])), 2),
+           lambda psi_m: tfd.Independent(tfd.Normal(loc=psi_m, scale=tf.ones([num_sectors, 1])), 2),
            # psi
            lambda psi_s: tfd.Independent(tfd.Normal(loc=tf.gather(psi_s, data["sector_id"], axis=0), scale=0.5), 2),
            # y
-           lambda psi, psi_s, phi: tfd.Independent(tfd.Normal(loc=tf.tensordot(phi, tt, axes=1),
-                                                              scale=tf.math.softplus(psi + 1 - tt[1])), 2)])
+           lambda psi, psi_s, psi_m, phi: tfd.Independent(tfd.Normal(loc=tf.tensordot(phi, tt, axes=1),
+                                                                     scale=tf.math.softplus(psi + 1 - tt[1])), 2)])
 
-def training(phi_s, phi, psi_s, psi, model, logp, learning_rate = 0.01, num_steps=10000):
+def training(phi_m, phi_s, phi, psi_m, psi_s, psi, model, logp, learning_rate = 0.01, num_steps=10000):
     """
     It performs optimization over the model parameters via Adam optimizer.
 
     Parameters
     ----------
+    phi_m: tf.Tensor
+        Initial value of market-level polynomial parameter.
     phi_s: tf.Tensor
         Initial values of sector-level polynomial parameters.
     phi: tf.Tensor
         Initial values of stock-level polynomial parameters.
+    psi_m: tf.Tensor
+        Initial values of market-level likelihood scale parameter.
     psi_s: tf.Tensor
         Initial values of sector-level likelihood scale parameters.
     psi: tf.Tensor
@@ -148,11 +156,11 @@ def training(phi_s, phi, psi_s, psi, model, logp, learning_rate = 0.01, num_step
     -------
     It returns trained parameters.
     """
-    log_posterior = lambda phi_s, phi, psi_s, psi: model.log_prob([phi_s, phi, psi_s, psi, logp])
-    loss = tfp.math.minimize(lambda: -log_posterior(phi_s, phi, psi_s, psi),
+    log_posterior = lambda phi_m, phi_s, phi, psi_m, psi_s, psi: model.log_prob([phi_m, phi_s, phi, psi_m, psi_s, psi, logp])
+    loss = tfp.math.minimize(lambda: -log_posterior(phi_m, phi_s, phi, psi_m, psi_s, psi),
                              optimizer=tf.optimizers.Adam(learning_rate=learning_rate),
                              num_steps=num_steps)
-    return phi_s, phi, psi_s, psi
+    return phi_m, phi_s, phi, psi_m, psi_s, psi
 
 
 if __name__ == '__main__':
@@ -194,8 +202,8 @@ if __name__ == '__main__':
     while attempt < 2:
         # train
         model = define_model(tt, order_scale)
-        phi_s, phi, psi_s, psi = (tf.Variable(model.sample()[:-1][i]) for i in range(4))
-        phi_s, phi, psi_s, psi = training(phi_s, phi, psi_s, psi, model, data["logp"])
+        phi_m, phi_s, phi, psi_m, psi_s, psi = (tf.Variable(model.sample()[:-1][i]) for i in range(6))
+        phi_m, phi_s, phi, psi_m, psi_s, psi = training(phi_m, phi_s, phi, psi_m, psi_s, psi, model, data["logp"])
         # calculate estimators of log-prices
         logp_est = np.dot(phi.numpy(), tt)
         std_logp_est = np.log(1 + np.exp(psi.numpy() + 1 - tt[1]))
@@ -233,6 +241,12 @@ if __name__ == '__main__':
     # calculate sector estimators of prices
     p_sec_est = np.exp(logp_sec_est + std_logp_sec_est ** 2 / 2)
     std_p_sec_est = np.sqrt(np.exp(2 * logp_sec_est + std_logp_sec_est ** 2) * (np.exp(std_logp_sec_est ** 2) - 1))
+    # calculate market estimators of log-prices
+    logp_mkt_est = np.dot(phi_m.numpy(), tt)
+    std_logp_mkt_est = np.log(1 + np.exp(psi_m.numpy() + 1 - tt[1]))
+    # calculate sector estimators of prices
+    p_mkt_est = np.exp(logp_mkt_est + std_logp_mkt_est ** 2 / 2)
+    std_p_mkt_est = np.sqrt(np.exp(2 * logp_mkt_est + std_logp_mkt_est ** 2) * (np.exp(std_logp_mkt_est ** 2) - 1))
 
     # stock thresholds
     st = {"HIGHLY BELOW TREND": 3, "BELOW TREND": 2, "ALONG TREND": 0, "ABOVE TREND": -2, "HIGHLY ABOVE TREND": -3}
@@ -247,6 +261,18 @@ if __name__ == '__main__':
     ranked_rating = np.array(list(si.keys())).repeat(list(np.diff(list(si.values()))) + [num_stocks - list(si.values())[-1]]).tolist()
 
     if args.plot_estimation:
+        print('\nPlotting market estimation...')
+        fig = plt.figure(figsize=(10,3))
+        left_mkt_est = np.maximum(0, p_mkt_est - std_p_mkt_est)
+        right_mkt_est = p_mkt_est + std_p_mkt_est
+
+        plt.plot(data["dates"], p_mkt_est[0], label="market estimation", color="C1")
+        plt.fill_between(data["dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 1 st. dev.", color="C0")
+        plt.legend(loc="upper left")
+        fig_name = 'market_estimation.png'
+        fig.savefig(fig_name, dpi=fig.dpi)
+        print('Sector estimation plot has been saved in this directory as {}.'.format(fig_name))
+
         num_columns = 3
         print('\nPlotting sector estimation...')
         # determine which sectors were not available to avoid plotting
@@ -301,18 +327,25 @@ if __name__ == '__main__':
             print('Stock estimation plot has been saved in this directory as {}.'.format(fig_name))
 
     print("\nPREDICTION TABLE")
-    print(60 * "--")
-    print("{:<11} {:<25} {:<25} {:<37} {:<15}".format("SYMBOL", "PRICE ON " + str(data["dates"][-1]), "PREDICTED PRICE NEXT DAY",
-                                              "STANDARD DEVIATION OF PREDICTION", "RATING"))
-    print(60 * "--")
+    num_dashes = 150
+    ranked_sector_names = data["sectors"][data["sector_id"]][rank]
+    ranked_sector_names = [name if name[:2] != "NA" else "Not Available" for name in ranked_sector_names]
+    print(num_dashes * "-")
+    print("{:<11} {:<26} {:<25} {:<28} {:<37} {:<15}".format("SYMBOL", "SECTOR", "PRICE ON " + str(data["dates"][-1]),
+                                                             "PREDICTED PRICE NEXT DAY",
+                                                             "STANDARD DEVIATION OF PREDICTION", "RATING"))
+    print(num_dashes * "-")
     for i in range(num_stocks):
-        print("{:<11} {:<25} {:<25} {:<37} {:<15}".format(ranked_tickers[i], ranked_p[i, -1],
+        print("{:<11} {:<26} {:<25} {:<28} {:<37} {:<15}".format(ranked_tickers[i], ranked_sector_names[i], ranked_p[i, -1],
                                                   ranked_p_pred[i, 1], ranked_std_p_pred[i, 1], ranked_rating[i]))
-        print(60 * "--")
+        print(num_dashes * "-")
+        if i + 1 in si.values():
+            print(num_dashes * "-")
 
     if args.save_prediction_table:
         tab_name = 'prediction_table.csv'
         table = zip(["SYMBOL"] + ranked_tickers.tolist(),
+                    ['SECTOR'] + ranked_sector_names,
                     ["PRICE ON " + str(data["dates"][-1])] + ranked_p[:, -1].tolist(),
                     ["PREDICTED PRICE NEXT DAY"] + ranked_p_pred[:, 1].tolist(),
                     ["STANDARD DEVIATION OF PREDICTION"] + ranked_std_p_pred[:, 1].tolist(),
