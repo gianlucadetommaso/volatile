@@ -176,6 +176,9 @@ if __name__ == '__main__':
     today = dt.date.today().strftime("%Y-%m-%d")
 
     print('\nDownloading all available closing prices in the last year...')
+    if args.symbols is None:
+        with open("symbols_list.txt", "r") as my_file:
+            args.symbols = my_file.readlines()[0].split(" ")
     data = load_data(args.symbols)
     tickers = data["tickers"]
     num_sectors = len(set(data["sector_id"]))
