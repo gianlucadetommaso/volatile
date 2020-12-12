@@ -26,10 +26,10 @@ def load_data(tickers: list):
     -------
     Dictionary including:
         - tickers: list of symbols with available information;
-        - dates: dates corresponding to available prices
-        - sectors: sectors name corresponding to `tickers`
-        - sector_id: integers identifying sectors of corresponding `tickers`
-        - logp: log-prices corresponding to `tickers`
+        - dates: dates corresponding to available prices;
+        - sectors: list of sectors at stock-level;
+        - industries: list of industries at stock-level;
+        - logp: log-prices at stock-level.
     """
     # make tickers unique
     tickers = list(set(tickers))
@@ -64,38 +64,43 @@ def load_data(tickers: list):
         # create a .csv to store stock information
         with open(filename, 'w') as file:
             wr = csv.writer(file)
-            for row in zip(["SYMBOL"], ["SECTOR"]):
+            for row in zip(["SYMBOL"], ["SECTOR"], ["INDUSTRY"]):
                 wr.writerow(row)
     # load stock information file
     stock_info = pd.read_csv(filename)
 
-    # load sector information. If already available in stock information file, load it from there. Otherwise, try out if
-    # it is available. If not, give a unique name to the sector of the corresponding stock.
-    sector_name = []
-    missing_sector_info = {}
+    # load sector and industry information. If any is already available in the stock information file, load it from
+    # there. Otherwise, try out if it is available in the data. If not, give it a unique name.
+    sectors = []
+    industries = []
+    missing_sector = {}
+    missing_industry = {}
     for i in range(len(tickers)):
         idx = np.where(stock_info["SYMBOL"].values == tickers[i])[0]
         if len(idx) > 0:
-            sector_name.append(stock_info["SECTOR"][idx[0]])
+            sectors.append(stock_info["SECTOR"][idx[0]])
+            industries.append(stock_info["INDUSTRY"][idx[0]])
         else:
             try:
-                sector_name.append(stocks.tickers[i].info["sector"])
-                missing_sector_info[tickers[i]] = sector_name[-1]
+                info = stocks.tickers[i].info
+                sectors.append(info["sector"])
+                missing_sector[tickers[i]] = sectors[-1]
+                industries.append(info["industry"])
+                missing_industry[tickers[i]] = industries[-1]
             except:
-                sector_name.append("NA" + str(i))
+                sectors.append("NA_sector" + str(i))
+                industries.append("NA_industry" + str(i))
 
-    # cache sector information that was not present before, except for names that were given artificially.
-    sectors = np.unique(sector_name)
-    sector_id = [np.where(sectors == sector)[0][0] for sector in sector_name]
-    stock_info = zip(list(missing_sector_info.keys()), list(missing_sector_info.values()))
+    # cache information that was not present before, except for names that were given artificially.
+    stock_info = zip(list(missing_sector.keys()), list(missing_sector.values()), list(missing_industry.values()))
     with open(filename, 'a+', newline='') as file:
         wr = csv.writer(file)
         for row in stock_info:
             wr.writerow(row)
 
-    return dict(tickers=tickers, dates=pd.to_datetime(df.index).date, sectors=sectors, sector_id=sector_id, logp=logp)
+    return dict(tickers=tickers, dates=pd.to_datetime(df.index).date, sectors=sectors, industries=industries, logp=logp)
 
-def define_model(tt: np.array, order_scale: np.array):
+def define_model(tt: np.array, order_scale: np.array, sectors: list, industries: list):
     """
     Define and return graphical model.
 
@@ -106,26 +111,49 @@ def define_model(tt: np.array, order_scale: np.array):
         scale.
     order_scale: np.array
         It reweighs prior scales of parameters at different orders of the polynomial.
+    sectors: list
+        Sectors at stock-level.
+    industries: list
+        Industries at stock-level.
     """
+    # find unique names of sectors
+    usectors = np.unique(sectors)
+    num_sectors = len(usectors)
+    # provide sector IDs at stock-level
+    sectors_id = [np.where(usectors == sector)[0][0] for sector in sectors]
+    # find unique names of industries and store indices
+    uindustries, industries_idx = np.unique(industries, return_index=True)
+    # provide industry IDs at stock-level
+    industries_id = [np.where(uindustries == industry)[0][0] for industry in industries]
+    # provide sector IDs at industry-level
+    sectors_industry_id = np.array(sectors_id)[industries_idx].tolist()
+
     return tfd.JointDistributionSequential([
            # phi_m
-           tfd.Independent(tfd.Normal(loc=tf.zeros([1, order + 1]), scale=2 * order_scale), 2),
+           tfd.Independent(tfd.Normal(loc=tf.zeros([1, order + 1]), scale=4 * order_scale), 2),
            # phi_s
-           lambda phi_m: tfd.Independent(tfd.Normal(loc=tf.repeat(phi_m, num_sectors, axis=0), scale=order_scale), 2),
+           lambda phi_m: tfd.Independent(tfd.Normal(loc=tf.repeat(phi_m, num_sectors, axis=0), scale=2 * order_scale), 2),
+           # phi_i
+           lambda phi_s: tfd.Independent(tfd.Normal(loc=tf.gather(phi_s, sectors_industry_id, axis=0),
+                                                    scale=order_scale), 2),
            # phi
-           lambda phi_s: tfd.Independent(tfd.Normal(loc=tf.gather(phi_s, data["sector_id"], axis=0),
+           lambda phi_i: tfd.Independent(tfd.Normal(loc=tf.gather(phi_i, industries_id, axis=0),
                                                     scale=0.5 * order_scale), 2),
            # psi_m
-           tfd.Normal(loc=0, scale=2),
+           tfd.Normal(loc=0, scale=4),
            # psi_s
-           lambda psi_m: tfd.Independent(tfd.Normal(loc=psi_m, scale=tf.ones([num_sectors, 1])), 2),
+           lambda psi_m: tfd.Independent(tfd.Normal(loc=psi_m, scale=2 * tf.ones([num_sectors, 1])), 2),
+           # psi_i
+           lambda psi_s: tfd.Independent(tfd.Normal(loc=tf.gather(psi_s, sectors_industry_id, axis=0), scale=1), 2),
            # psi
-           lambda psi_s: tfd.Independent(tfd.Normal(loc=tf.gather(psi_s, data["sector_id"], axis=0), scale=0.5), 2),
+           lambda psi_i: tfd.Independent(tfd.Normal(loc=tf.gather(psi_i, industries_id, axis=0), scale=0.5), 2),
            # y
-           lambda psi, psi_s, psi_m, phi: tfd.Independent(tfd.Normal(loc=tf.tensordot(phi, tt, axes=1),
-                                                                     scale=tf.math.softplus(psi + 1 - tt[1])), 2)])
+           lambda psi, psi_i, psi_s, psi_m, phi: tfd.Independent(tfd.Normal(loc=tf.tensordot(phi, tt, axes=1),
+                                                                            scale=tf.math.softplus(psi + 1 - tt[1])), 2)])
 
-def training(phi_m, phi_s, phi, psi_m, psi_s, psi, model, logp, learning_rate = 0.01, num_steps=10000):
+def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tensor, psi_m: tf.Tensor, psi_s: tf.Tensor,
+             psi_i: tf.Tensor, psi: tf.Tensor, model: tfd.JointDistributionSequential, logp: np.array,
+             learning_rate: float = 0.01, num_steps: int =10000, plot_loss: bool = False):
     """
     It performs optimization over the model parameters via Adam optimizer.
 
@@ -135,12 +163,16 @@ def training(phi_m, phi_s, phi, psi_m, psi_s, psi, model, logp, learning_rate = 
         Initial value of market-level polynomial parameter.
     phi_s: tf.Tensor
         Initial values of sector-level polynomial parameters.
+    phi_i: tf.Tensor
+        Initial values of industry-level polynomial parameters.
     phi: tf.Tensor
         Initial values of stock-level polynomial parameters.
     psi_m: tf.Tensor
         Initial values of market-level likelihood scale parameter.
     psi_s: tf.Tensor
         Initial values of sector-level likelihood scale parameters.
+    psi_i: tf.Tensor
+        Initial values of industry-level likelihood scale parameters.
     psi: tf.Tensor
         Initial values of stock-level likelihood scale parameters.
     model: tfd.JointDistributionSequential
@@ -151,26 +183,39 @@ def training(phi_m, phi_s, phi, psi_m, psi_s, psi, model, logp, learning_rate = 
         Adam's fixed learning rate.
     num_steps: int
         Adam's fixed number of iterations.
+    plot_loss: bool
+        If True, a loss function decay plot is saved in the current directory.
 
     Returns
     -------
     It returns trained parameters.
     """
-    log_posterior = lambda phi_m, phi_s, phi, psi_m, psi_s, psi: model.log_prob([phi_m, phi_s, phi, psi_m, psi_s, psi, logp])
-    loss = tfp.math.minimize(lambda: -log_posterior(phi_m, phi_s, phi, psi_m, psi_s, psi),
+    def log_posterior(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi, logp):
+        return model.log_prob([phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi, logp])
+    loss = tfp.math.minimize(lambda: -log_posterior(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi, logp),
                              optimizer=tf.optimizers.Adam(learning_rate=learning_rate),
                              num_steps=num_steps)
-    return phi_m, phi_s, phi, psi_m, psi_s, psi
+    if plot_loss:
+        fig_name = 'loss_decay.png'
+        fig = plt.figure(figsize=(10, 3))
+        plt.plot(loss)
+        plt.legend(["loss decay"])
+        plt.xlabel("iteration")
+        fig.savefig(fig_name, dpi=fig.dpi)
+        print('Loss function decay plot has been saved in this directory as {}.'.format(fig_name))
+    return phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi
 
 
 if __name__ == '__main__':
     cli = ArgumentParser('Volatile: your day-to-day trading companion.',
                          formatter_class=ArgumentDefaultsHelpFormatter)
     cli.add_argument('-s', '--symbols', type=str, nargs='+', help='List of symbols.')
-    cli.add_argument('-pe', '--plot-estimation', type=bool, default=True,
-                     help='Plot estimates and uncertainty between start and current date.')
-    cli.add_argument('-spt', '--save-prediction-table', type=bool, default=False,
+    cli.add_argument('--save-table', action='store_true',
                      help='Save prediction table in csv format.')
+    cli.add_argument('--no-plots', action='store_true',
+                     help='Plot estimates with their uncertainty over time.')
+    cli.add_argument('--plot-loss', action='store_true',
+                     help='Plot loss function decay over training iterations.')
     args = cli.parse_args()
 
     today = dt.date.today().strftime("%Y-%m-%d")
@@ -181,8 +226,6 @@ if __name__ == '__main__':
             args.symbols = my_file.readlines()[0].split(" ")
     data = load_data(args.symbols)
     tickers = data["tickers"]
-    num_sectors = len(set(data["sector_id"]))
-    num_stocks = data["logp"].shape[0]
 
     # how many days to look ahead when comparing the current price against a prediction
     horizon = 5
@@ -200,35 +243,46 @@ if __name__ == '__main__':
     # prediction times up to horizon
     tt_pred = np.arange(1 + horizon) / t
 
-    # training is attempted up to twice
-    attempt = 0
-    while attempt < 2:
-        # train
-        model = define_model(tt, order_scale)
-        phi_m, phi_s, phi, psi_m, psi_s, psi = (tf.Variable(model.sample()[:-1][i]) for i in range(6))
-        phi_m, phi_s, phi, psi_m, psi_s, psi = training(phi_m, phi_s, phi, psi_m, psi_s, psi, model, data["logp"])
-        # calculate estimators of log-prices
-        logp_est = np.dot(phi.numpy(), tt)
-        std_logp_est = np.log(1 + np.exp(psi.numpy() + 1 - tt[1]))
-        # calculate estimators of prices
-        p_est = np.exp(logp_est + std_logp_est ** 2 / 2)
-        std_p_est = np.sqrt(np.exp(2 * logp_est + std_logp_est ** 2) * (np.exp(std_logp_est ** 2) - 1))
-        # calculate predictions of log-prices
-        logp_pred = np.dot(phi.numpy(), np.array([1 + tt_pred]) ** np.arange(order + 1)[:, None])
-        std_logp_pred = np.log(1 + np.exp(psi.numpy() + tt_pred))
-        # calculate prediction of prices
-        p_pred = np.exp(logp_pred + std_logp_pred ** 2 / 2)
-        std_p_pred = np.sqrt(np.exp(2 * logp_pred + std_logp_pred ** 2) * (np.exp(std_logp_pred ** 2) - 1))
-        # determine score
-        scores = ((logp_pred[:, horizon] - data["logp"][:, -1]) / std_logp_pred[:, horizon])
-        # retrain if at least one prediction is 5 standard deviations away the current price
-        if np.max(np.abs(scores) > 5):
-            attempt += 1
-        else:
-            break
+    # training the model
+    model = define_model(tt, order_scale, data['sectors'], data['industries'])
+    phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = (tf.Variable(tf.zeros_like(model.sample()[:-1][i])) for i in range(8))
+    phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = training(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi,
+                                                                  model, data["logp"], plot_loss=args.plot_loss)
+    # calculate stock-level estimators of log-prices
+    logp_est = np.dot(phi.numpy(), tt)
+    std_logp_est = np.log(1 + np.exp(psi.numpy() + 1 - tt[1]))
+    # calculate stock-level estimators of prices
+    p_est = np.exp(logp_est + std_logp_est ** 2 / 2)
+    # calculate stock-level predictions of log-prices
+    logp_pred = np.dot(phi.numpy(), np.array([1 + tt_pred]) ** np.arange(order + 1)[:, None])
+    std_logp_pred = np.log(1 + np.exp(psi.numpy() + tt_pred))
+    std_p_est = np.sqrt(np.exp(2 * logp_est + std_logp_est ** 2) * (np.exp(std_logp_est ** 2) - 1))
+    # calculate stock-level prediction of prices
+    p_pred = np.exp(logp_pred + std_logp_pred ** 2 / 2)
+    std_p_pred = np.sqrt(np.exp(2 * logp_pred + std_logp_pred ** 2) * (np.exp(std_logp_pred ** 2) - 1))
+    # calculate industry-level estimators of log-prices
+    logp_ind_est = np.dot(phi_i.numpy(), tt)
+    std_logp_ind_est = np.log(1 + np.exp(psi_i.numpy() + 1 - tt[1]))
+    # calculate industry-level estimators of prices
+    p_ind_est = np.exp(logp_ind_est + std_logp_ind_est ** 2 / 2)
+    std_p_ind_est = np.sqrt(np.exp(2 * logp_ind_est + std_logp_ind_est ** 2) * (np.exp(std_logp_ind_est ** 2) - 1))
+    # calculate sector-level estimators of log-prices
+    logp_sec_est = np.dot(phi_s.numpy(), tt)
+    std_logp_sec_est = np.log(1 + np.exp(psi_s.numpy() + 1 - tt[1]))
+    # calculate sector-level estimators of prices
+    p_sec_est = np.exp(logp_sec_est + std_logp_sec_est ** 2 / 2)
+    std_p_sec_est = np.sqrt(np.exp(2 * logp_sec_est + std_logp_sec_est ** 2) * (np.exp(std_logp_sec_est ** 2) - 1))
+    # calculate market-level estimators of log-prices
+    logp_mkt_est = np.dot(phi_m.numpy(), tt)
+    std_logp_mkt_est = np.log(1 + np.exp(psi_m.numpy() + 1 - tt[1]))
+    # calculate market-level estimators of prices
+    p_mkt_est = np.exp(logp_mkt_est + std_logp_mkt_est ** 2 / 2)
+    std_p_mkt_est = np.sqrt(np.exp(2 * logp_mkt_est + std_logp_mkt_est ** 2) * (np.exp(std_logp_mkt_est ** 2) - 1))
 
     print("Training completed.")
 
+    # calculate score
+    scores = ((logp_pred[:, horizon] - data["logp"][:, -1]) / std_logp_pred[:, horizon])
     # rank according to score
     rank = np.argsort(scores)[::-1]
     ranked_tickers = np.array(tickers)[rank]
@@ -238,19 +292,7 @@ if __name__ == '__main__':
     ranked_std_p_est = std_p_est[rank]
     ranked_p_pred = p_pred[rank]
     ranked_std_p_pred = std_p_pred[rank]
-    # calculate sector estimators of log-prices
-    logp_sec_est = np.dot(phi_s.numpy(), tt)
-    std_logp_sec_est = np.log(1 + np.exp(psi_s.numpy() + 1 - tt[1]))
-    # calculate sector estimators of prices
-    p_sec_est = np.exp(logp_sec_est + std_logp_sec_est ** 2 / 2)
-    std_p_sec_est = np.sqrt(np.exp(2 * logp_sec_est + std_logp_sec_est ** 2) * (np.exp(std_logp_sec_est ** 2) - 1))
-    # calculate market estimators of log-prices
-    logp_mkt_est = np.dot(phi_m.numpy(), tt)
-    std_logp_mkt_est = np.log(1 + np.exp(psi_m.numpy() + 1 - tt[1]))
-    # calculate sector estimators of prices
-    p_mkt_est = np.exp(logp_mkt_est + std_logp_mkt_est ** 2 / 2)
-    std_p_mkt_est = np.sqrt(np.exp(2 * logp_mkt_est + std_logp_mkt_est ** 2) * (np.exp(std_logp_mkt_est ** 2) - 1))
-
+    
     # stock thresholds
     st = {"HIGHLY BELOW TREND": 3, "BELOW TREND": 2, "ALONG TREND": 0, "ABOVE TREND": -2, "HIGHLY ABOVE TREND": -3}
     # stock information
@@ -261,39 +303,41 @@ if __name__ == '__main__':
               "HIGHLY ABOVE TREND": np.where(ranked_scores <= st["HIGHLY ABOVE TREND"])[0]}
     si = {k: v[0] for k, v in si.items() if len(v) > 0}
     # rate all stocks
+    num_stocks = data['logp'].shape[0]
     ranked_rating = np.array(list(si.keys())).repeat(list(np.diff(list(si.values()))) + [num_stocks - list(si.values())[-1]]).tolist()
 
-    if args.plot_estimation:
+    if not args.no_plots:
         print('\nPlotting market estimation...')
         fig = plt.figure(figsize=(10,3))
-        left_mkt_est = np.maximum(0, p_mkt_est - std_p_mkt_est)
-        right_mkt_est = p_mkt_est + std_p_mkt_est
+        left_mkt_est = np.maximum(0, p_mkt_est - 2 * std_p_mkt_est)
+        right_mkt_est = p_mkt_est + 2 * std_p_mkt_est
 
         plt.plot(data["dates"], p_mkt_est[0], label="market estimation", color="C1")
-        plt.fill_between(data["dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 1 st. dev.", color="C0")
+        plt.fill_between(data["dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 2 st. dev.", color="C0")
         plt.legend(loc="upper left")
         fig_name = 'market_estimation.png'
         fig.savefig(fig_name, dpi=fig.dpi)
-        print('Sector estimation plot has been saved in this directory as {}.'.format(fig_name))
+        print('Market estimation plot has been saved in this directory as {}.'.format(fig_name))
 
         num_columns = 3
         print('\nPlotting sector estimation...')
         # determine which sectors were not available to avoid plotting
-        NA_sectors = np.where(np.array([sec[:2] for sec in data["sectors"]]) == "NA")[0]
+        usectors = np.unique(data["sectors"])
+        num_sectors = len(usectors)
+        NA_sectors = np.where(np.array([sec[:2] for sec in usectors]) == "NA")[0]
         num_NA_sectors = len(NA_sectors)
 
-        # plot sectors
-        left_sec_est = np.maximum(0, p_sec_est - std_p_sec_est)
-        right_sec_est = p_sec_est + std_p_sec_est
+        left_sec_est = np.maximum(0, p_sec_est - 2 * std_p_sec_est)
+        right_sec_est = p_sec_est + 2 * std_p_sec_est
         fig = plt.figure(figsize=(20, max(num_sectors - num_NA_sectors, 5)))
         j = 0
         for i in range(num_sectors):
             if i not in NA_sectors:
                 j += 1
                 plt.subplot(int(np.ceil((num_sectors - num_NA_sectors) / num_columns)), num_columns, j)
-                plt.title(data["sectors"][i], fontsize=15)
+                plt.title(usectors[i], fontsize=15)
                 plt.plot(data["dates"], p_sec_est[i], label="sector estimation", color="C1")
-                plt.fill_between(data["dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 1 st. dev.", color="C0")
+                plt.fill_between(data["dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
                 plt.yticks(fontsize=12)
                 plt.xticks(rotation=45)
                 plt.legend(loc="upper left")
@@ -302,15 +346,40 @@ if __name__ == '__main__':
         fig.savefig(fig_name, dpi=fig.dpi)
         print('Sector estimation plot has been saved in this directory as {}.'.format(fig_name))
 
-        print('\nPlotting stock estimation...')
-        # determine which stocks are along trend to avoid plotting
+        print('\nPlotting industry estimation...')
+        uindustries = np.unique(data["industries"])
+        num_industries = len(uindustries)
+        NA_industries = np.where(np.array([ind[:2] for ind in uindustries]) == "NA")[0]
+        num_NA_industries = len(NA_industries)
+
+        left_ind_est = np.maximum(0, p_ind_est - 2 * std_p_ind_est)
+        right_ind_est = p_ind_est + 2 * std_p_ind_est
+        fig = plt.figure(figsize=(20, max(num_industries - num_NA_industries, 5)))
+        j = 0
+        for i in range(num_industries):
+            if i not in NA_industries:
+                j += 1
+                plt.subplot(int(np.ceil((num_industries - num_NA_industries) / num_columns)), num_columns, j)
+                plt.title(uindustries[i], fontsize=15)
+                plt.plot(data["dates"], p_ind_est[i], label="industry estimation", color="C1")
+                plt.fill_between(data["dates"], left_ind_est[i], right_ind_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
+                plt.yticks(fontsize=12)
+                plt.xticks(rotation=45)
+                plt.legend(loc="upper left")
+        plt.tight_layout()
+        fig_name = 'industry_estimation.png'
+        fig.savefig(fig_name, dpi=fig.dpi)
+        print('Industry estimation plot has been saved in this directory as {}.'.format(fig_name))
+
+        # determine which stocks are along trend to avoid plotting them
         along_trend = np.where(np.array(ranked_rating) == "ALONG TREND")[0]
         num_out_trend = num_stocks - len(along_trend)
 
-        # plot stocks
-        ranked_left_est = np.maximum(0, ranked_p_est - 2 * ranked_std_p_est)
-        ranked_right_est = ranked_p_est + 2 * ranked_std_p_est
         if num_out_trend > 0:
+            print('\nPlotting stock estimation...')
+            ranked_left_est = np.maximum(0, ranked_p_est - 2 * ranked_std_p_est)
+            ranked_right_est = ranked_p_est + 2 * ranked_std_p_est
+
             j = 0
             fig = plt.figure(figsize=(20, max(num_out_trend, 5)))
             for i in range(num_stocks):
@@ -330,25 +399,29 @@ if __name__ == '__main__':
             print('Stock estimation plot has been saved in this directory as {}.'.format(fig_name))
 
     print("\nPREDICTION TABLE")
-    num_dashes = 150
-    ranked_sector_names = data["sectors"][data["sector_id"]][rank]
-    ranked_sector_names = [name if name[:2] != "NA" else "Not Available" for name in ranked_sector_names]
+    ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["sectors"])[rank]]
+    ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["industries"])[rank]]
+    num_dashes = 193
     print(num_dashes * "-")
-    print("{:<11} {:<26} {:<25} {:<28} {:<37} {:<15}".format("SYMBOL", "SECTOR", "PRICE ON " + str(data["dates"][-1]),
+    print("{:<11} {:<26} {:<42} {:<25} {:<28} {:<37} {:<15}".format("SYMBOL", "SECTOR", "INDUSTRY",
+                                                             "PRICE ON " + str(data["dates"][-1]),
                                                              "PREDICTED PRICE NEXT DAY",
                                                              "STANDARD DEVIATION OF PREDICTION", "RATING"))
     print(num_dashes * "-")
     for i in range(num_stocks):
-        print("{:<11} {:<26} {:<25} {:<28} {:<37} {:<15}".format(ranked_tickers[i], ranked_sector_names[i], ranked_p[i, -1],
-                                                  ranked_p_pred[i, 1], ranked_std_p_pred[i, 1], ranked_rating[i]))
+        print("{:<11} {:<26} {:<42} {:<25} {:<28} {:<37} {:<15}".format(ranked_tickers[i], ranked_sectors[i],
+                                                                        ranked_industries[i], ranked_p[i, -1],
+                                                                        ranked_p_pred[i, 1], ranked_std_p_pred[i, 1],
+                                                                        ranked_rating[i]))
         print(num_dashes * "-")
         if i + 1 in si.values():
             print(num_dashes * "-")
 
-    if args.save_prediction_table:
+    if args.save_table:
         tab_name = 'prediction_table.csv'
         table = zip(["SYMBOL"] + ranked_tickers.tolist(),
-                    ['SECTOR'] + ranked_sector_names,
+                    ['SECTOR'] + ranked_sectors,
+                    ['INDUSTRY'] + ranked_industries,
                     ["PRICE ON " + str(data["dates"][-1])] + ranked_p[:, -1].tolist(),
                     ["PREDICTED PRICE NEXT DAY"] + ranked_p_pred[:, 1].tolist(),
                     ["STANDARD DEVIATION OF PREDICTION"] + ranked_std_p_pred[:, 1].tolist(),
