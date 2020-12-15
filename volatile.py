@@ -127,6 +127,8 @@ def define_model(tt: np.array, order_scale: np.array, sectors: list, industries:
     industries_id = [np.where(uindustries == industry)[0][0] for industry in industries]
     # provide sector IDs at industry-level
     sectors_industry_id = np.array(sectors_id)[industries_idx].tolist()
+    # order of the polynomial model
+    order = len(order_scale) - 1
 
     return tfd.JointDistributionSequential([
            # phi_m
@@ -205,6 +207,40 @@ def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tenso
         print('Loss function decay plot has been saved in this directory as {}.'.format(fig_name))
     return phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi
 
+def order_selection(logp: np.array, orders: np.array = np.arange(2, 14), horizon: int = 5):
+    t = logp[:, :-horizon].shape[1]
+    losses = []
+    suborders = [orders[2 * i:2 * (i + 1)] for i in range(int(np.ceil(0.5 * len(orders))))]
+    i = 0
+    print("\nModel selection in progress. This can take a few minutes...")
+    while i < len(suborders):
+        sub_losses = []
+        for order in suborders[i]:
+            # times corresponding to trading dates in the data
+            tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+            # reweighing factors for parameters corresponding to different orders of the polynomial
+            order_scale = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
+            # prediction times up to horizon
+            tt_pred = np.arange(1, 1 + horizon) / t
+
+            # training the model
+            model = define_model(tt, order_scale, data['sectors'], data['industries'])
+            phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = (tf.Variable(tf.zeros_like(model.sample()[:-1][i])) for i in
+                                                                  range(8))
+            phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = training(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi,
+                                                                          model, logp[:, :-horizon])
+            # calculate stock-level predictions of log-prices
+            logp_pred = np.dot(phi.numpy(), np.array([1 + tt_pred]) ** np.arange(order + 1)[:, None])
+            std_logp_pred = np.log(1 + np.exp(psi.numpy() + tt_pred))
+            scores = (logp_pred - logp[:, -horizon:]) / std_logp_pred
+            sub_losses.append(np.mean(scores ** 2) - 1)
+        if len(losses) > 0 and np.min(sub_losses) > np.min(losses):
+            break
+        losses += sub_losses
+        i += 1
+    order = orders[np.argmin(losses)]
+    print("Model selection completed. Volatile will use a polynomial model of degree {}.".format(order))
+    return order
 
 if __name__ == '__main__':
     cli = ArgumentParser('Volatile: your day-to-day trading companion.',
@@ -226,11 +262,12 @@ if __name__ == '__main__':
             args.symbols = my_file.readlines()[0].split(" ")
     data = load_data(args.symbols)
     tickers = data["tickers"]
+    num_stocks = data['logp'].shape[0]
 
     # how many days to look ahead when comparing the current price against a prediction
     horizon = 5
     # order of the polynomial
-    order = 7
+    order = order_selection(data['logp']) if num_stocks >= 30 else 5
 
     print("\nTraining the model...")
 
@@ -303,7 +340,6 @@ if __name__ == '__main__':
               "HIGHLY ABOVE TREND": np.where(ranked_scores <= st["HIGHLY ABOVE TREND"])[0]}
     si = {k: v[0] for k, v in si.items() if len(v) > 0}
     # rate all stocks
-    num_stocks = data['logp'].shape[0]
     ranked_rating = np.array(list(si.keys())).repeat(list(np.diff(list(si.values()))) + [num_stocks - list(si.values())[-1]]).tolist()
 
     if not args.no_plots:
@@ -397,6 +433,8 @@ if __name__ == '__main__':
             fig_name = 'stock_estimation.png'
             fig.savefig(fig_name, dpi=fig.dpi)
             print('Stock estimation plot has been saved in this directory as {}.'.format(fig_name))
+        elif os.path.exists('stock_estimation.png'):
+            os.remove('stock_estimation.png')
 
     print("\nPREDICTION TABLE")
     ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["sectors"])[rank]]
@@ -406,7 +444,7 @@ if __name__ == '__main__':
     print("{:<11} {:<26} {:<42} {:<25} {:<28} {:<37} {:<15}".format("SYMBOL", "SECTOR", "INDUSTRY",
                                                              "PRICE ON " + str(data["dates"][-1]),
                                                              "PREDICTED PRICE NEXT DAY",
-                                                             "STANDARD DEVIATION OF PREDICTION", "RATING"))
+                                                             "STANDARD DEVIATION OF PREDICTION", "SCORE", "RATING"))
     print(num_dashes * "-")
     for i in range(num_stocks):
         print("{:<11} {:<26} {:<42} {:<25} {:<28} {:<37} {:<15}".format(ranked_tickers[i], ranked_sectors[i],
