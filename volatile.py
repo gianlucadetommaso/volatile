@@ -52,7 +52,7 @@ def load_data(tickers: list):
             missing_tickers))
     # reset list of tickers and stocks
     tickers = list(df.columns)
-    stocks = yf.Tickers(tickers)
+    stocks = [yf.Tickers(tickers[i*254:(i+1)*254]).tickers for i in range(int(np.ceil(len(tickers) / 254)))]
     # store log-prices
     logp = np.log(df.to_numpy().T)
 
@@ -82,7 +82,7 @@ def load_data(tickers: list):
             industries.append(stock_info["INDUSTRY"][idx[0]])
         else:
             try:
-                info = stocks.tickers[i].info
+                info = stocks[i // 254][i % 254].info
                 sectors.append(info["sector"])
                 missing_sector[tickers[i]] = sectors[-1]
                 industries.append(info["industry"])
