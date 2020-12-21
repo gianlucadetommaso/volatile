@@ -9,7 +9,6 @@
 
 # Volatile 
 ### Your day-to-day trading companion.
-
 The word "volatile" comes from the Latin *volatilis*, meaning "having wings" or "able to fly". With time, the financial market adopted it to describe asset price variability over time. Here, Volatile becomes a "trading companion", designed to help you every day to make unemotional, algorithmic-based, trading decisions.
 
 </td>
@@ -47,7 +46,12 @@ Finally,  `market_estimation.png` shows the overall estimated market trend. This
 If you do not want plots to be saved in the current directory, you can disable them by adding the flag `--no-plots`.
 
 ### How to install
-Installing Volatile follows a standard procedure. First, open a terminal and go to the directory where you intend to install Volatile. On a Mac or Linux, you can do so by typing
+The easiest way to use Volatile is to:
+- open [this](https://raw.githubusercontent.com/gianlucadetommaso/volatile/master/Volatile.ipynb) notebook;
+- depending on your OS, press `ctrl+s` or `cmd+s` to save it as a `.ipynb` file (make sure not to save it as a `.txt` file, which is the default option);
+- upload the notebook on [Google Colab](https://colab.research.google.com/notebooks/intro.ipynb#recent=true) and run it. 
+
+Alternatively, you can download Volatile locally. First, open a terminal and go to the directory where you intend to install Volatile. On a Mac or Linux, you can do so by typing
 ```ruby
 cd path/to/your/directory
 ```
@@ -66,9 +70,9 @@ Now that you are in your virtual environment, install the dependencies:
 ```ruby
 pip install tensorflow-cpu tensorflow-probability matplotlib yfinance
 ```
-Alternatively, you can also use the requirements file; type `pip install -r requirements.txt`. 
+As an alternative, you can also use the requirements file; type `pip install -r requirements.txt`. 
 
-**Important**: Tensorflow is currently supported only up to Python 3.8, not yet Python 3.9; make sure to activate the virtual environment with the right Python version.
+**Important**: Tensorflow is currently supported only up to Python 3.8, not yet Python 3.9 (see [here](https://www.tensorflow.org/install/pip)); make sure to activate the virtual environment with the right Python version.
 
 Done! You're all set to use Volatile. 
 
@@ -95,7 +99,7 @@ In order to estimate parameters, we condition on log-prices <a href="https://www
 
 Obtained our estimates <a href="https://www.codecogs.com/eqnedit.php?latex=\hat\phi^m,\hat\phi^s,\hat\phi^\iota,\hat\phi,\hat\psi^m,\hat\psi^s,\hat\psi^\iota\text{&space;and&space;}&space;\hat\psi" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat\phi^m,\hat\phi^s,\hat\phi^\iota,\hat\phi,\hat\psi^m,\hat\psi^s,\hat\psi^\iota\text{&space;and&space;}&space;\hat\psi" title="\hat\phi^m,\hat\phi^s,\hat\phi^\iota,\hat\phi,\hat\psi^m,\hat\psi^s,\hat\psi^\iota\text{ and } \hat\psi" /></a>, we can use the likelihood mean <a href="https://www.codecogs.com/eqnedit.php?latex=\hat&space;y_{t,i}=\sum_{j=0}^{D}\hat\phi_{i,j}\,\tau_t^j" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat&space;y_{t,i}=\sum_{j=0}^{D}\hat\phi_{i,j}\,\tau_t^j" title="\hat y_{t,i}=\sum_{j=0}^{D}\hat\phi_{i,j}\,\tau_t^j" /></a> as an estimator of the log-prices for any time in the past, as well as a predictor for times in the short future. As a measure of uncertainty, we take the learned scale of the likelihood, that is <a href="https://www.codecogs.com/eqnedit.php?latex=\hat\sigma_{t,i}=\log(1&plus;e^{\hat\psi_i&plus;|1-\tau_t|})" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat\sigma_{t,i}=\log(1&plus;e^{\hat\psi_i&plus;|1-\tau_t|})" title="\hat\sigma_{t,i}=\log(1+e^{\hat\psi_i+|1-\tau_t|})" /></a>.
 
-We use the estimates above to select the order <a href="https://www.codecogs.com/eqnedit.php?latex=D" target="_blank"><img src="https://latex.codecogs.com/gif.latex?D" title="D" /></a> of the polynomial. For each candidate order, we train the model with data up to 5 trading days before the current date, then predict the last 5 trading days and test against actual observations. If the likelihood model fits well the data, we should have that the empirical second moment  <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{1}{5N}\sum_{r=0}^4\sum_{i=1}^N\left(\frac{\hat&space;y_{T-r,i}-y_{T-r,i}}{\hat\sigma_{T-r,i}}\right)^2" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{1}{5N}\sum_{r=0}^4\sum_{i=1}^N\left(\frac{\hat&space;y_{T-r,i}-y_{T-r,i}}{\hat\sigma_{T-r,i}}\right)^2" title="\frac{1}{5N}\sum_{r=0}^4\sum_{i=1}^N\left(\frac{\hat y_{T-r,i}-y_{T-r,i}}{\hat\sigma_{T-r,i}}\right)^2" /></a> is approximately 1, where <a href="https://www.codecogs.com/eqnedit.php?latex=\hat&space;y_{T-r,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat&space;y_{T-r,i}" title="\hat y_{T-r,i}" /></a> and <a href="https://www.codecogs.com/eqnedit.php?latex=\hat\sigma_{T-r,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat\sigma_{T-r,i}" title="\hat\sigma_{T-r,i}" /></a> are the estimators described above, while <a href="https://www.codecogs.com/eqnedit.php?latex=y_{T-r,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?y_{T-r,i}" title="y_{T-r,i}" /></a> are actual log-price observations. Thus, we compute their absolute distance and select the polynomial order that makes it the smallest.
+We use the estimates above to select the order <a href="https://www.codecogs.com/eqnedit.php?latex=D" target="_blank"><img src="https://latex.codecogs.com/gif.latex?D" title="D" /></a> of the polynomial. For each candidate order, we train the model with data up to 5 trading days before the current date, then predict the last 5 trading days and test against actual observations. If the likelihood model fits well the data, we should have that the empirical second moment  <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{1}{5N}\sum_{r=0}^4\sum_{i=1}^N\left(\frac{\hat&space;y_{T-r,i}-y_{T-r,i}}{\hat\sigma_{T-r,i}}\right)^2" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{1}{5N}\sum_{r=0}^4\sum_{i=1}^N\left(\frac{\hat&space;y_{T-r,i}-y_{T-r,i}}{\hat\sigma_{T-r,i}}\right)^2" title="\frac{1}{5N}\sum_{r=0}^4\sum_{i=1}^N\left(\frac{\hat y_{T-r,i}-y_{T-r,i}}{\hat\sigma_{T-r,i}}\right)^2" /></a> is approximately 1, where <a href="https://www.codecogs.com/eqnedit.php?latex=\hat&space;y_{T-r,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat&space;y_{T-r,i}" title="\hat y_{T-r,i}" /></a> and <a href="https://www.codecogs.com/eqnedit.php?latex=\hat\sigma_{T-r,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat\sigma_{T-r,i}" title="\hat\sigma_{T-r,i}" /></a> are the estimators described above, while <a href="https://www.codecogs.com/eqnedit.php?latex=y_{T-r,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?y_{T-r,i}" title="y_{T-r,i}" /></a> are actual log-price observations. Thus, we first compute the absolute distance between the empirical second model and 1, then select the polynomial order that makes it the smallest.
 
 Given the selected model complexity, Volatile trains the model and provides a rating for each stock by introducing the following score:
 
