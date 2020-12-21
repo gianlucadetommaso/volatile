@@ -208,39 +208,38 @@ def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tenso
     return phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi
 
 def order_selection(logp: np.array, orders: np.array = np.arange(2, 14), horizon: int = 5):
-    t = logp[:, :-horizon].shape[1]
-    losses = []
-    suborders = [orders[2 * i:2 * (i + 1)] for i in range(int(np.ceil(0.5 * len(orders))))]
-    i = 0
     print("\nModel selection in progress. This can take a few minutes...")
-    while i < len(suborders):
-        sub_losses = []
-        for order in suborders[i]:
-            # times corresponding to trading dates in the data
-            tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
-            # reweighing factors for parameters corresponding to different orders of the polynomial
-            order_scale = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
-            # prediction times up to horizon
-            tt_pred = np.arange(1, 1 + horizon) / t
+    t = logp[:, :-horizon].shape[1]
+    min_loss = np.inf
+    count = 0
+    for i, order in enumerate(orders):
+        # times corresponding to trading dates in the data
+        tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+        # reweighing factors for parameters corresponding to different orders of the polynomial
+        order_scale = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
+        # prediction times up to horizon
+        tt_pred = ((np.arange(1, 1 + horizon) / t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
 
-            # training the model
-            model = define_model(tt, order_scale, data['sectors'], data['industries'])
-            phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = (tf.Variable(tf.zeros_like(model.sample()[:-1][i])) for i in
-                                                                  range(8))
-            phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = training(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi,
-                                                                          model, logp[:, :-horizon])
-            # calculate stock-level predictions of log-prices
-            logp_pred = np.dot(phi.numpy(), np.array([1 + tt_pred]) ** np.arange(order + 1)[:, None])
-            std_logp_pred = np.log(1 + np.exp(psi.numpy() + tt_pred))
-            scores = (logp_pred - logp[:, -horizon:]) / std_logp_pred
-            sub_losses.append(np.mean(scores ** 2) - 1)
-        if len(losses) > 0 and np.min(sub_losses) > np.min(losses):
+        # training the model
+        model = define_model(tt, order_scale, data['sectors'], data['industries'])
+        phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = (tf.Variable(tf.zeros_like(model.sample()[:-1][i])) for i in
+                                                              range(8))
+        phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = training(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi,
+                                                                      model, logp[:, :-horizon])
+        logp_pred = np.dot(phi.numpy(), np.array([1 + tt_pred[1]]) ** np.arange(order + 1)[:, None])
+        std_logp_pred = np.log(1 + np.exp(psi.numpy() + tt_pred[1]))
+        scores = (logp_pred - logp[:, -horizon:]) / std_logp_pred
+        loss = np.abs(np.mean(scores ** 2) - 1)
+        if i > 0 and loss > min_loss:
+            count += 1
+        else:
+            min_loss = loss
+            min_order = order
+            count = 0
+        if count == 3:
             break
-        losses += sub_losses
-        i += 1
-    order = orders[np.argmin(losses)]
-    print("Model selection completed. Volatile will use a polynomial model of degree {}.".format(order))
-    return order
+    print("Model selection completed. Volatile will use a polynomial model of degree {}.".format(min_order))
+    return min_order
 
 if __name__ == '__main__':
     cli = ArgumentParser('Volatile: your day-to-day trading companion.',
@@ -267,7 +266,7 @@ if __name__ == '__main__':
     # how many days to look ahead when comparing the current price against a prediction
     horizon = 5
     # order of the polynomial
-    order = order_selection(data['logp']) if num_stocks >= 30 else 5
+    order = order_selection(data['logp'])
 
     print("\nTraining the model...")
 
@@ -353,7 +352,7 @@ if __name__ == '__main__':
         plt.legend(loc="upper left")
         fig_name = 'market_estimation.png'
         fig.savefig(fig_name, dpi=fig.dpi)
-        print('Market estimation plot has been saved in this directory as {}.'.format(fig_name))
+        print('Market estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
 
         num_columns = 3
         print('\nPlotting sector estimation...')
@@ -380,7 +379,7 @@ if __name__ == '__main__':
         plt.tight_layout()
         fig_name = 'sector_estimation.png'
         fig.savefig(fig_name, dpi=fig.dpi)
-        print('Sector estimation plot has been saved in this directory as {}.'.format(fig_name))
+        print('Sector estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
 
         print('\nPlotting industry estimation...')
         uindustries = np.unique(data["industries"])
@@ -405,7 +404,7 @@ if __name__ == '__main__':
         plt.tight_layout()
         fig_name = 'industry_estimation.png'
         fig.savefig(fig_name, dpi=fig.dpi)
-        print('Industry estimation plot has been saved in this directory as {}.'.format(fig_name))
+        print('Industry estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
 
         # determine which stocks are along trend to avoid plotting them
         along_trend = np.where(np.array(ranked_rating) == "ALONG TREND")[0]
@@ -432,7 +431,7 @@ if __name__ == '__main__':
             plt.tight_layout()
             fig_name = 'stock_estimation.png'
             fig.savefig(fig_name, dpi=fig.dpi)
-            print('Stock estimation plot has been saved in this directory as {}.'.format(fig_name))
+            print('Stock estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
         elif os.path.exists('stock_estimation.png'):
             os.remove('stock_estimation.png')
 
@@ -468,4 +467,4 @@ if __name__ == '__main__':
             wr = csv.writer(file)
             for row in table:
                 wr.writerow(row)
-        print('\nThe prediction table printed above has been saved in this directory as {}.'.format(tab_name))
+        print('\nThe prediction table printed above has been saved to {}/{}.'.format(os.getcwd(), tab_name))
