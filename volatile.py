@@ -438,7 +438,7 @@ if __name__ == '__main__':
     print("\nPREDICTION TABLE")
     ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["sectors"])[rank]]
     ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["industries"])[rank]]
-    num_dashes = 119
+    num_dashes = 126
     print(num_dashes * "-")
     print("{:<11} {:<26} {:<42} {:<25} {:<15}".format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATING"))
     print(num_dashes * "-")

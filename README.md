@@ -24,26 +24,25 @@ python volatile.py
 ```
 Volatile will automatically analyse the list of stock symbols saved in `symbols_list.txt`. This should neither be considered as representative nor complete list of stocks; feel free to update it as you please (do not worry if by chance you enter a symbol twice). Mind that it can take a while to access information of stock symbols that are either not in the list or that you pass for the first time. For this reason, relevant stock information is stored in `stock_info.csv` and will be fast to access from the second time onwards.
 
-You can also directly ask Volatile to analyse a list of stocks that you are interested in. Mind that, if this list is not fairly large, Volatile will not have enough exposition to the market to provide accurate results. Anyway, as a didactical example, suppose that you want Volatile to analyse the following stock symbols: GOOGL, AAPL, MSFT, NFLX, FB, IBM, SAP, DELL, BABA and AMZN. You can do so by typing
-```ruby
-python volatile.py -s GOOGL AAPL MSFT NFLX FB IBM SAP DELL BABA AMZN
-```
 When the run is complete, a prediction table like the following will appear printed on your shell:
 
-<img width="1356" alt="Screenshot 2020-12-16 at 00 15 23" src="https://user-images.githubusercontent.com/32386694/102284107-e9017180-3f33-11eb-8ee0-c3b621dbab96.png">
+![Screenshot 2020-12-22 at 15 47 01](https://user-images.githubusercontent.com/32386694/102900698-f4d9c000-446c-11eb-9bf2-05b215fa9fdb.png)
 
 For each symbol, the table tells you its sector and industry, then the last available price and finally a rating. Possible ratings are HIGHLY ABOVE TREND, ABOVE TREND, ALONG TREND, BELOW TREND and HIGHLY BELOW TREND. Symbols appear in the table ranked from the furthest above to the furthest below their respective trends. Ranking and rating are derived from a score metric that compares the predicted closing price in 5 trading days (usually this corresponds to the price in one week) to the last available observed price, scaling by the standard deviation of the prediction; see the technical part below for more details. The prediction table can be saved in the current directory as `prediction_table.csv` by adding the following flag to the command above: `--save-table`.
 
 In the current directory, several estimation plots will appear. `stock_estimation.png` is a visualisation of stock prices and their estimations over the last year, together with a notion of uncertainty. Only stocks rated either above or below their trends will be plotted, ranked as in the prediction table. Notice how the estimation crucially attempts to reproduce the trend of a stock but not to learn its noise. The uncertainty, on the other hand, depends on the stock volatility; the smaller the volatility, the more confident we are about our estimates, the more a sudden shift from the trend will be regarded as significant. You can use this plot as a sanity check that the estimation procedure agrees with your intuition. Make sure to glance at it before any transaction.
-![stock_estimation](https://user-images.githubusercontent.com/32386694/102284204-0f271180-3f34-11eb-99de-e47424ec1716.png)
+![Screenshot 2020-12-22 at 15 42 23](https://user-images.githubusercontent.com/32386694/102900703-f905dd80-446c-11eb-9775-9a49245efcac.png)
 
- `sector_estimation.png` and `industry_estimation.png` are plots that help you visualise estimated sector and industry performances. A sector estimate can be though as the average behaviour of its belonging industries, which in turn should be regarded as the average behaviour of its belonging stocks. Both sectors and industries are ranked in alphabetical order. If, like in this case, you only provide Volatile a few symbols, you cannot expect sector and industry information to be accurate. However, when a larger amount of symbols is provided, these plots are a good way to quickly check how sector and industry of the stock that you intend to buy or sell are doing.
-![sector_estimation](https://user-images.githubusercontent.com/32386694/102284136-f28ad980-3f33-11eb-8326-2d4f626b2131.png)
-![industry_estimation](https://user-images.githubusercontent.com/32386694/102284133-f0287f80-3f33-11eb-9e50-6a7fd5d4697b.png)
+ `sector_estimation.png` and `industry_estimation.png` are plots that help you to quickly visualise estimated sector and industry performances. A sector estimate can be though as the average behaviour of its belonging industries, which in turn should be regarded as the average behaviour of its belonging stocks. Both sectors and industries are ranked in alphabetical order.
+<img width="1270" alt="Screenshot 2020-12-22 at 15 43 49" src="https://user-images.githubusercontent.com/32386694/102900734-0327dc00-446d-11eb-8185-c54572e3be07.png">
 
-Finally,  `market_estimation.png` shows the overall estimated market trend. This can be considered as the average of the sector estimates. Like for sectors and industries, this estimate cannot be accurate if only a few stocks are provided. Use this plot to immediately know in what phase the stock market currently is.
-![market_estimation](https://user-images.githubusercontent.com/32386694/102284145-f4ed3380-3f33-11eb-9587-4e2fcf8ac23f.png)
+<img width="916" alt="Screenshot 2020-12-22 at 15 54 06" src="https://user-images.githubusercontent.com/32386694/102901469-f788e500-446d-11eb-861a-a58ac5097537.png">
+
+Finally,  `market_estimation.png` shows the overall estimated market trend. This can be considered as the average of the sector estimates. Use this plot to immediately know in what phase the stock market currently is.
+![market_estimation](https://user-images.githubusercontent.com/32386694/102900756-0cb14400-446d-11eb-9dcd-5d32d0c63e13.png)
 If you do not want plots to be saved in the current directory, you can disable them by adding the flag `--no-plots`.
+
+You can also provide a list of symbols directly in the command line using the flag `-s`; for example, type `python volatile.py -s AAPL GOOGL`. In this case, Volatile will perform analysis exclusively based on AAPL and GOOGL. Mind that if the list of symbols is rather small, Volatile will not have enough exposure to the market to provide accurate results.
 
 ### How to install
 The easiest way to use Volatile is to:
