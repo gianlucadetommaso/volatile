@@ -34,10 +34,10 @@ def load_data(tickers: list):
     # make tickers unique
     tickers = list(set(tickers))
     # download all last year available closing prices
-    df = yf.download(tickers, period="1y")['Close']
+    df = yf.download(tickers, period="1y")['Adj Close']
     # fix inconsistency if only one stock is loaded
     if df.ndim == 1:
-        df = pd.DataFrame(df).rename(columns={"Close": tickers[0]})
+        df = pd.DataFrame(df).rename(columns={"Adj Close": tickers[0]})
     # drop stocks that have NaN in at least half of the period
     df.drop(columns=df.columns[np.where((df.isnull().sum(0) > df.shape[0] // 2 + 1) == True)[0]], inplace=True)
     # raise exception if no stock is left
