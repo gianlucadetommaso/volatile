@@ -438,17 +438,13 @@ if __name__ == '__main__':
     print("\nPREDICTION TABLE")
     ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["sectors"])[rank]]
     ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["industries"])[rank]]
-    num_dashes = 193
+    num_dashes = 119
     print(num_dashes * "-")
-    print("{:<11} {:<26} {:<42} {:<25} {:<28} {:<37} {:<15}".format("SYMBOL", "SECTOR", "INDUSTRY",
-                                                             "PRICE ON " + str(data["dates"][-1]),
-                                                             "PREDICTED PRICE NEXT DAY",
-                                                             "STANDARD DEVIATION OF PREDICTION", "SCORE", "RATING"))
+    print("{:<11} {:<26} {:<42} {:<25} {:<15}".format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATING"))
     print(num_dashes * "-")
     for i in range(num_stocks):
-        print("{:<11} {:<26} {:<42} {:<25} {:<28} {:<37} {:<15}".format(ranked_tickers[i], ranked_sectors[i],
+        print("{:<11} {:<26} {:<42} {:<25} {:<15}".format(ranked_tickers[i], ranked_sectors[i],
                                                                         ranked_industries[i], ranked_p[i, -1],
-                                                                        ranked_p_pred[i, 1], ranked_std_p_pred[i, 1],
                                                                         ranked_rating[i]))
         print(num_dashes * "-")
         if i + 1 in si.values():
@@ -459,9 +455,7 @@ if __name__ == '__main__':
         table = zip(["SYMBOL"] + ranked_tickers.tolist(),
                     ['SECTOR'] + ranked_sectors,
                     ['INDUSTRY'] + ranked_industries,
-                    ["PRICE ON " + str(data["dates"][-1])] + ranked_p[:, -1].tolist(),
-                    ["PREDICTED PRICE NEXT DAY"] + ranked_p_pred[:, 1].tolist(),
-                    ["STANDARD DEVIATION OF PREDICTION"] + ranked_std_p_pred[:, 1].tolist(),
+                    ["LAST AVAILABLE PRICE"] + ranked_p[:, -1].tolist(),
                     ["RATING"] + ranked_rating)
         with open(tab_name, 'w') as file:
             wr = csv.writer(file)
