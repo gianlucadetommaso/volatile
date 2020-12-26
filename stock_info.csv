@@ -579,3 +579,57 @@ RUN,Technology,Solar
 WEN,Consumer Cyclical,Restaurants
 WING,Consumer Cyclical,Restaurants
 YUM,Consumer Cyclical,Restaurants
+AC,Financial Services,Capital Markets
+AMT,Real Estate,REIT—Specialty
+ATH,Financial Services,Insurance—Diversified
+BAND,Technology,Software—Infrastructure
+CIIC,Financial Services,Shell Companies
+COOP,Financial Services,Mortgage Finance
+CUBI,Financial Services,Banks—Regional
+CZR,Consumer Cyclical,Resorts & Casinos
+DKL,Energy,Oil & Gas Midstream
+EXPE,Consumer Cyclical,Travel Services
+FBC,Financial Services,Banks—Regional
+FCRD,Financial Services,Asset Management
+FLMN,Energy,Oil & Gas E&P
+HMST,Financial Services,Banks—Regional
+INFN,Technology,Communication Equipment
+LVS,Consumer Cyclical,Resorts & Casinos
+LYFT,Technology,Software—Application
+MCHP,Technology,Semiconductors
+MVC,Financial Services,Asset Management
+NAVI,Financial Services,Credit Services
+OCN,Financial Services,Mortgage Finance
+PRG,Industrials,Rental & Leasing Services
+REAL,Consumer Cyclical,Specialty Retail
+SBAC,Real Estate,REIT—Specialty
+SNAP,Communication Services,Internet Content & Information
+STZ,Consumer Defensive,Beverages—Wineries & Distilleries
+ACI,Consumer Defensive,Grocery Stores
+AEO,Consumer Cyclical,Apparel Retail
+AFL,Financial Services,Insurance—Life
+AGCO,Industrials,Farm & Heavy Construction Machinery
+HRB,Consumer Cyclical,Personal Services
+LB,Consumer Cyclical,Apparel Retail
+NATH,Consumer Cyclical,Restaurants
+NET,Technology,Software—Infrastructure
+NHI,Real Estate,REIT—Healthcare Facilities
+SNX,Technology,Information Technology Services
+SSRM,Basic Materials,Gold
+TDS,Communication Services,Telecom Services
+TREX,Industrials,Building Products & Equipment
+VMI,Industrials,Metal Fabrication
+WWE,Communication Services,Entertainment
+GDDY,Technology,Software—Infrastructure
+KEYS,Technology,Scientific & Technical Instruments
+LDOS,Technology,Information Technology Services
+LMND,Financial Services,Insurance—Property & Casualty
+NOW,Technology,Software—Application
+NUAN,Technology,Software—Application
+ZEN,Technology,Software—Application
+BBBY,Consumer Cyclical,Specialty Retail
+CLR,Energy,Oil & Gas E&P
+MPC,Energy,Oil & Gas Refining & Marketing
+NI,Utilities,Utilities—Regulated Gas
+RAD,Healthcare,Pharmaceutical Retailers
+SFIX,Consumer Cyclical,Specialty Retail

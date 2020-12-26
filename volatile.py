@@ -130,31 +130,28 @@ def define_model(tt: np.array, order_scale: np.array, sectors: list, industries:
     # order of the polynomial model
     order = len(order_scale) - 1
 
-    return tfd.JointDistributionSequential([
+    return tfd.JointDistributionSequentialAutoBatched([
            # phi_m
-           tfd.Independent(tfd.Normal(loc=tf.zeros([1, order + 1]), scale=4 * order_scale), 2),
+           tfd.Normal(loc=tf.zeros([1, order + 1]), scale=4 * order_scale),
            # phi_s
-           lambda phi_m: tfd.Independent(tfd.Normal(loc=tf.repeat(phi_m, num_sectors, axis=0), scale=2 * order_scale), 2),
+           lambda phi_m: tfd.Normal(loc=tf.repeat(phi_m, num_sectors, axis=0), scale=2 * order_scale),
            # phi_i
-           lambda phi_s: tfd.Independent(tfd.Normal(loc=tf.gather(phi_s, sectors_industry_id, axis=0),
-                                                    scale=order_scale), 2),
+           lambda phi_s: tfd.Normal(loc=tf.gather(phi_s, sectors_industry_id, axis=0), scale=order_scale),
            # phi
-           lambda phi_i: tfd.Independent(tfd.Normal(loc=tf.gather(phi_i, industries_id, axis=0),
-                                                    scale=0.5 * order_scale), 2),
+           lambda phi_i: tfd.Normal(loc=tf.gather(phi_i, industries_id, axis=0), scale=0.5 * order_scale),
            # psi_m
            tfd.Normal(loc=0, scale=4),
            # psi_s
-           lambda psi_m: tfd.Independent(tfd.Normal(loc=psi_m, scale=2 * tf.ones([num_sectors, 1])), 2),
+           lambda psi_m: tfd.Normal(loc=psi_m, scale=2 * tf.ones([num_sectors, 1])),
            # psi_i
-           lambda psi_s: tfd.Independent(tfd.Normal(loc=tf.gather(psi_s, sectors_industry_id, axis=0), scale=1), 2),
+           lambda psi_s: tfd.Normal(loc=tf.gather(psi_s, sectors_industry_id, axis=0), scale=1),
            # psi
-           lambda psi_i: tfd.Independent(tfd.Normal(loc=tf.gather(psi_i, industries_id, axis=0), scale=0.5), 2),
+           lambda psi_i: tfd.Normal(loc=tf.gather(psi_i, industries_id, axis=0), scale=0.5),
            # y
-           lambda psi, psi_i, psi_s, psi_m, phi: tfd.Independent(tfd.Normal(loc=tf.tensordot(phi, tt, axes=1),
-                                                                            scale=tf.math.softplus(psi + 1 - tt[1])), 2)])
+           lambda psi, psi_i, psi_s, psi_m, phi: tfd.Normal(loc=tf.tensordot(phi, tt, axes=1), scale=tf.math.softplus(psi + 1 - tt[1]))])
 
 def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tensor, psi_m: tf.Tensor, psi_s: tf.Tensor,
-             psi_i: tf.Tensor, psi: tf.Tensor, model: tfd.JointDistributionSequential, logp: np.array,
+             psi_i: tf.Tensor, psi: tf.Tensor, model: tfd.JointDistributionSequentialAutoBatched, logp: np.array,
              learning_rate: float = 0.01, num_steps: int =10000, plot_loss: bool = False):
     """
     It performs optimization over the model parameters via Adam optimizer.
@@ -177,7 +174,7 @@ def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tenso
         Initial values of industry-level likelihood scale parameters.
     psi: tf.Tensor
         Initial values of stock-level likelihood scale parameters.
-    model: tfd.JointDistributionSequential
+    model: tfd.JointDistributionSequentialAutoBatched
         Graphical model to train.
     logp: np.array
         Log-price stock information.
@@ -207,7 +204,7 @@ def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tenso
         print('Loss function decay plot has been saved in this directory as {}.'.format(fig_name))
     return phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi
 
-def order_selection(logp: np.array, orders: np.array = np.arange(2, 14), horizon: int = 5):
+def order_selection(logp: np.array, orders: np.array = np.arange(1, 14), horizon: int = 5):
     print("\nModel selection in progress. This can take a few minutes...")
     t = logp[:, :-horizon].shape[1]
     min_loss = np.inf
