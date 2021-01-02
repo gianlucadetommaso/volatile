@@ -33,28 +33,35 @@ def load_data(tickers: list):
     """
     # make tickers unique
     tickers = list(set(tickers))
-    # download all last year available closing prices
-    df = yf.download(tickers, period="1y")['Adj Close']
+    # download all last year available adjusted closing prices and volumes
+    dfp = yf.download(tickers, period="1y")[["Adj Close", "Volume"]]
+    dfp, dfv = dfp["Adj Close"], dfp["Volume"]
     # fix inconsistency if only one stock is loaded
-    if df.ndim == 1:
-        df = pd.DataFrame(df).rename(columns={"Adj Close": tickers[0]})
-    # drop stocks that have NaN in at least half of the period
-    df.drop(columns=df.columns[np.where((df.isnull().sum(0) > df.shape[0] // 2 + 1) == True)[0]], inplace=True)
+    if dfp.ndim == 1:
+        dfp = pd.DataFrame(dfp).rename(columns={"Adj Close": tickers[0]})
+        dfv = pd.DataFrame(dfv).rename(columns={"Volume": tickers[0]})
+    # drop stocks that have more than one NaN
+    rm_idx = np.union1d(np.where((dfp.isnull().sum(0) > 2) == True)[0],
+                        np.where((dfv.isnull().sum(0) > 2) == True)[0])
+    dfp.drop(columns=dfp.columns[rm_idx], inplace=True)
+    dfv.drop(columns=dfv.columns[rm_idx], inplace=True)
     # raise exception if no stock is left
-    if df.size == 0:
+    if dfp.size == 0:
         raise Exception("No symbol with full information is available.")
     # propagate data backwards to fill NaNs, then forward, then drop possible duplicated dates
-    df = df.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
+    dfp = dfp.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
+    dfv = dfv.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
     # print out unavailable symbols
-    missing_tickers = [tick for tick in tickers if tick not in df.columns]
+    missing_tickers = [tick for tick in tickers if tick not in dfp.columns]
     if len(missing_tickers) > 0:
         print('\nRemoving {} from list of symbols because yfinance could not provide full information.'.format(
             missing_tickers))
     # reset list of tickers and stocks
-    tickers = list(df.columns)
+    tickers = list(dfp.columns)
     stocks = [yf.Tickers(tickers[i*254:(i+1)*254]).tickers for i in range(int(np.ceil(len(tickers) / 254)))]
-    # store log-prices
-    logp = np.log(df.to_numpy().T)
+    # store log-prices and volumes
+    logp = np.log(dfp.to_numpy().T)
+    volume = dfv.to_numpy().T
 
     filename = "stock_info.csv"
     print('\nAccessing stock information. For all symbols that you download for the first time, this can take a '
@@ -98,9 +105,10 @@ def load_data(tickers: list):
         for row in stock_info:
             wr.writerow(row)
 
-    return dict(tickers=tickers, dates=pd.to_datetime(df.index).date, sectors=sectors, industries=industries, logp=logp)
+    return dict(tickers=tickers, dates=pd.to_datetime(dfp.index).date, sectors=sectors, industries=industries, logp=logp,
+                volume=volume)
 
-def define_model(tt: np.array, order_scale: np.array, sectors: list, industries: list):
+def define_model(tt: np.array, order_scale: np.array, lkd_scale: np.array, sectors: list, industries: list):
     """
     Define and return graphical model.
 
@@ -111,6 +119,8 @@ def define_model(tt: np.array, order_scale: np.array, sectors: list, industries:
         scale.
     order_scale: np.array
         It reweighs prior scales of parameters at different orders of the polynomial.
+    lkd_scale: np.array
+        It reweighs the likelihood scale.
     sectors: list
         Sectors at stock-level.
     industries: list
@@ -148,7 +158,8 @@ def define_model(tt: np.array, order_scale: np.array, sectors: list, industries:
            # psi
            lambda psi_i: tfd.Normal(loc=tf.gather(psi_i, industries_id, axis=0), scale=0.5),
            # y
-           lambda psi, psi_i, psi_s, psi_m, phi: tfd.Normal(loc=tf.tensordot(phi, tt, axes=1), scale=tf.math.softplus(psi + 1 - tt[1]))])
+           lambda psi, psi_i, psi_s, psi_m, phi: tfd.Normal(loc=tf.tensordot(phi, tt, axes=1),
+                                                            scale=tf.math.softplus(psi + lkd_scale))])
 
 def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tensor, psi_m: tf.Tensor, psi_s: tf.Tensor,
              psi_i: tf.Tensor, psi: tf.Tensor, model: tfd.JointDistributionSequentialAutoBatched, logp: np.array,
@@ -204,7 +215,7 @@ def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tenso
         print('Loss function decay plot has been saved in this directory as {}.'.format(fig_name))
     return phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi
 
-def order_selection(logp: np.array, orders: np.array = np.arange(1, 14), horizon: int = 5):
+def order_selection(logp: np.array, volume: np.array, orders: np.array = np.arange(1, 14), horizon: int = 5):
     print("\nModel selection in progress. This can take a few minutes...")
     t = logp[:, :-horizon].shape[1]
     min_loss = np.inf
@@ -214,17 +225,22 @@ def order_selection(logp: np.array, orders: np.array = np.arange(1, 14), horizon
         tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
         # reweighing factors for parameters corresponding to different orders of the polynomial
         order_scale = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
+        # likelihood scaling factor, giving more importance to recent and high-volume observations
+        lkd_scale = (1 - tt[1]) / (1 + volume[:, :-horizon])
+        lkd_scale /= lkd_scale.max()
         # prediction times up to horizon
-        tt_pred = ((np.arange(1, 1 + horizon) / t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+        tt_pred = (np.arange(1, 1 + horizon) / t).astype('float32')
 
         # training the model
-        model = define_model(tt, order_scale, data['sectors'], data['industries'])
+        model = define_model(tt, order_scale, lkd_scale, data['sectors'], data['industries'])
         phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = (tf.Variable(tf.zeros_like(model.sample()[:-1][i])) for i in
                                                               range(8))
         phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = training(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi,
                                                                       model, logp[:, :-horizon])
-        logp_pred = np.dot(phi.numpy(), np.array([1 + tt_pred[1]]) ** np.arange(order + 1)[:, None])
-        std_logp_pred = np.log(1 + np.exp(psi.numpy() + tt_pred[1]))
+        logp_pred = np.dot(phi.numpy(), np.array([1 + tt_pred]) ** np.arange(order + 1)[:, None])
+        lkd_scale_pred = tt_pred / (1 + volume[:, -horizon:])
+        lkd_scale_pred = lkd_scale_pred.max()
+        std_logp_pred = np.log(1 + np.exp(psi.numpy() + lkd_scale_pred))
         scores = (logp_pred - logp[:, -horizon:]) / std_logp_pred
         loss = np.abs(np.mean(scores ** 2) - 1)
         if i > 0 and loss > min_loss:
@@ -263,7 +279,7 @@ if __name__ == '__main__':
     # how many days to look ahead when comparing the current price against a prediction
     horizon = 5
     # order of the polynomial
-    order = order_selection(data['logp'])
+    order = order_selection(data['logp'], data['volume'])
 
     print("\nTraining the model...")
 
@@ -273,17 +289,22 @@ if __name__ == '__main__':
     tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
     # reweighing factors for parameters corresponding to different orders of the polynomial
     order_scale = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
+    # likelihood scaling factor, giving more importance to recent and high-volume observations
+    lkd_scale = (1 - tt[1]) / (1 + data['volume'])
+    lkd_scale /= lkd_scale.max()
     # prediction times up to horizon
     tt_pred = np.arange(1 + horizon) / t
 
     # training the model
-    model = define_model(tt, order_scale, data['sectors'], data['industries'])
+    model = define_model(tt, order_scale, lkd_scale, data['sectors'], data['industries'])
     phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = (tf.Variable(tf.zeros_like(model.sample()[:-1][i])) for i in range(8))
     phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = training(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi,
                                                                   model, data["logp"], plot_loss=args.plot_loss)
     # calculate stock-level estimators of log-prices
     logp_est = np.dot(phi.numpy(), tt)
-    std_logp_est = np.log(1 + np.exp(psi.numpy() + 1 - tt[1]))
+    lkd_scale_est = (1 - tt[1]) / (1 + data['volume'])
+    lkd_scale_est /= lkd_scale_est.max()
+    std_logp_est = np.log(1 + np.exp(psi.numpy() + lkd_scale_est))
     # calculate stock-level estimators of prices
     p_est = np.exp(logp_est + std_logp_est ** 2 / 2)
     # calculate stock-level predictions of log-prices
