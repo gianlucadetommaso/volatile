@@ -26,20 +26,20 @@ Volatile will automatically analyse the list of stock symbols saved in `symbols_
 
 When the run is complete, a prediction table like the following will appear printed on your shell:
 
-![Screenshot 2020-12-22 at 15 47 01](https://user-images.githubusercontent.com/32386694/102900698-f4d9c000-446c-11eb-9bf2-05b215fa9fdb.png)
+<img width="896" alt="Screenshot 2021-01-03 at 16 55 03" src="https://user-images.githubusercontent.com/32386694/103483027-5d655d00-4ddc-11eb-97c6-5ddb53413b75.png">
 
 For each symbol, the table tells you its sector and industry, then the last available price and finally a rating. Possible ratings are HIGHLY ABOVE TREND, ABOVE TREND, ALONG TREND, BELOW TREND and HIGHLY BELOW TREND. Symbols appear in the table ranked from the furthest above to the furthest below their respective trends. Ranking and rating are derived from a score metric that compares the predicted price in 5 trading days (usually this corresponds to the price in one week) to the last available observed price, scaling by the standard deviation of the prediction; see the technical part below for more details. The prediction table can be saved in the current directory as `prediction_table.csv` by adding the following flag to the command above: `--save-table`.
 
-In the current directory, several estimation plots will appear. `stock_estimation.png` is a visualisation of stock prices and their estimations over the last year, together with a notion of uncertainty. Only stocks rated either above or below their trends will be plotted, ranked as in the prediction table. Notice how the estimation crucially attempts to reproduce the trend of a stock but not to learn its noise. The uncertainty, on the other hand, depends on the stock volatility; the smaller the volatility, the more confident we are about our estimates, the more a sudden shift from the trend will be regarded as significant. You can use this plot as a sanity check that the estimation procedure agrees with your intuition. Make sure to glance at it before any transaction.
-![Screenshot 2020-12-22 at 15 42 23](https://user-images.githubusercontent.com/32386694/102900703-f905dd80-446c-11eb-9775-9a49245efcac.png)
+In the current directory, several estimation plots will appear. `stock_estimation.png` is a visualisation of stock prices and their estimations over the last year, together with a notion of uncertainty and daily trading volume. Only stocks rated either above or below their trends will be plotted, ranked as in the prediction table. Notice how the estimation crucially attempts to reproduce the trend of a stock but not to learn its noise. The uncertainty, on the other hand, depends on the stock volatility; the smaller the volatility, the more confident we are about our estimates, the more a sudden shift from the trend will be regarded as significant You can use this plot as a sanity check that the estimation procedure agrees with your intuition. Make sure to glance at it before any transaction.
+<img width="1094" alt="Screenshot 2021-01-03 at 16 56 42" src="https://user-images.githubusercontent.com/32386694/103483053-87b71a80-4ddc-11eb-9785-0e87bd37649a.png">
 
  `sector_estimation.png` and `industry_estimation.png` are plots that help you to quickly visualise estimated sector and industry performances. A sector estimate can be though as the average behaviour of its belonging industries, which in turn should be regarded as the average behaviour of its belonging stocks. Both sectors and industries are ranked in alphabetical order.
-<img width="1270" alt="Screenshot 2020-12-22 at 15 43 49" src="https://user-images.githubusercontent.com/32386694/102900734-0327dc00-446d-11eb-8185-c54572e3be07.png">
+<img width="1434" alt="Screenshot 2021-01-03 at 18 40 49" src="https://user-images.githubusercontent.com/32386694/103485021-277ba500-4deb-11eb-87c1-b1c841647ccb.png">
 
-<img width="916" alt="Screenshot 2020-12-22 at 15 54 06" src="https://user-images.githubusercontent.com/32386694/102901469-f788e500-446d-11eb-861a-a58ac5097537.png">
+<img width="1332" alt="Screenshot 2021-01-03 at 18 41 24" src="https://user-images.githubusercontent.com/32386694/103485017-22b6f100-4deb-11eb-89f4-c87c67bdc3c5.png">
 
 Finally,  `market_estimation.png` shows the overall estimated market trend. This can be considered as the average of the sector estimates. Use this plot to immediately know in what phase the stock market currently is.
-![market_estimation](https://user-images.githubusercontent.com/32386694/102900756-0cb14400-446d-11eb-9dcd-5d32d0c63e13.png)
+![market_estimation](https://user-images.githubusercontent.com/32386694/103483268-f183f400-4ddd-11eb-8c82-94e5675fb65f.png)
 If you do not want plots to be saved in the current directory, you can disable them by adding the flag `--no-plots`.
 
 You can also provide a list of symbols directly in the command line using the flag `-s`; for example, type `python volatile.py -s AAPL GOOGL`. In this case, Volatile will perform analysis exclusively based on AAPL and GOOGL. Mind that if the list of symbols is rather small, Volatile will not have enough exposure to the market to provide accurate results.

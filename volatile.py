@@ -19,46 +19,53 @@ def load_data(tickers: list):
 
     Parameters
     ----------
-    tickers: list 
-        Stock symbols
+    tickers: list
+    Stock symbols
 
     Returns
     -------
     Dictionary including:
-        - tickers: list of symbols with available information;
-        - dates: dates corresponding to available prices;
-        - sectors: list of sectors at stock-level;
-        - industries: list of industries at stock-level;
-        - logp: log-prices at stock-level.
+    - tickers: list of symbols with available information;
+    - dates: dates corresponding to available prices;
+    - sectors: list of sectors at stock-level;
+    - industries: list of industries at stock-level;
+    - logp: log-prices at stock-level;
+    - volume: volume of transitions at stock-level.
     """
     # make tickers unique
     tickers = list(set(tickers))
-    # download all last year available closing prices
-    df = yf.download(tickers, period="1y")['Adj Close']
+    # download all last year available adjusted closing prices and volumes
+    dfp = yf.download(tickers, period="1y")[["Adj Close", "Volume"]]
+    dfp, dfv = dfp["Adj Close"], dfp["Volume"]
     # fix inconsistency if only one stock is loaded
-    if df.ndim == 1:
-        df = pd.DataFrame(df).rename(columns={"Adj Close": tickers[0]})
-    # drop stocks that have NaN in at least half of the period
-    df.drop(columns=df.columns[np.where((df.isnull().sum(0) > df.shape[0] // 2 + 1) == True)[0]], inplace=True)
+    if dfp.ndim == 1:
+        dfp = pd.DataFrame(dfp).rename(columns={"Adj Close": tickers[0]})
+        dfv = pd.DataFrame(dfv).rename(columns={"Volume": tickers[0]})
+    # drop stocks that have at least two NaNs
+    rm_idx = np.union1d(np.where((dfp.isnull().sum(0) > 2) == True)[0],
+    np.where((dfv.isnull().sum(0) > 2) == True)[0])
+    dfp.drop(columns=dfp.columns[rm_idx], inplace=True)
+    dfv.drop(columns=dfv.columns[rm_idx], inplace=True)
     # raise exception if no stock is left
-    if df.size == 0:
+    if dfp.size == 0:
         raise Exception("No symbol with full information is available.")
     # propagate data backwards to fill NaNs, then forward, then drop possible duplicated dates
-    df = df.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
+    dfp = dfp.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
+    dfv = dfv.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
     # print out unavailable symbols
-    missing_tickers = [tick for tick in tickers if tick not in df.columns]
+    missing_tickers = [tick for tick in tickers if tick not in dfp.columns]
     if len(missing_tickers) > 0:
-        print('\nRemoving {} from list of symbols because yfinance could not provide full information.'.format(
-            missing_tickers))
+        print('\nRemoving {} from list of symbols because yfinance could not provide full information.'.format(missing_tickers))
     # reset list of tickers and stocks
-    tickers = list(df.columns)
+    tickers = list(dfp.columns)
     stocks = [yf.Tickers(tickers[i*254:(i+1)*254]).tickers for i in range(int(np.ceil(len(tickers) / 254)))]
-    # store log-prices
-    logp = np.log(df.to_numpy().T)
+    # store log-prices and volumes
+    logp = np.log(dfp.to_numpy().T)
+    volume = dfv.to_numpy().T
 
     filename = "stock_info.csv"
     print('\nAccessing stock information. For all symbols that you download for the first time, this can take a '
-          'while. Otherwise, stock information is cached into ' + filename + ' and accessing it will be fast.')
+    'while. Otherwise, stock information is cached into ' + filename + ' and accessing it will be fast.')
 
     if not os.path.exists(filename):
         # create a .csv to store stock information
@@ -98,7 +105,8 @@ def load_data(tickers: list):
         for row in stock_info:
             wr.writerow(row)
 
-    return dict(tickers=tickers, dates=pd.to_datetime(df.index).date, sectors=sectors, industries=industries, logp=logp)
+    return dict(tickers=tickers, dates=pd.to_datetime(dfp.index).date, sectors=sectors, industries=industries, logp=logp,
+    volume=volume)
 
 def define_model(tt: np.array, order_scale: np.array, sectors: list, industries: list):
     """
@@ -227,6 +235,7 @@ def order_selection(logp: np.array, orders: np.array = np.arange(1, 14), horizon
         std_logp_pred = np.log(1 + np.exp(psi.numpy() + tt_pred[1]))
         scores = (logp_pred - logp[:, -horizon:]) / std_logp_pred
         loss = np.abs(np.mean(scores ** 2) - 1)
+        print(order, loss)
         if i > 0 and loss > min_loss:
             count += 1
         else:
@@ -258,7 +267,7 @@ if __name__ == '__main__':
             args.symbols = my_file.readlines()[0].split(" ")
     data = load_data(args.symbols)
     tickers = data["tickers"]
-    num_stocks = data['logp'].shape[0]
+    num_stocks, num_dates = data['logp'].shape
 
     # how many days to look ahead when comparing the current price against a prediction
     horizon = 5
@@ -286,10 +295,10 @@ if __name__ == '__main__':
     std_logp_est = np.log(1 + np.exp(psi.numpy() + 1 - tt[1]))
     # calculate stock-level estimators of prices
     p_est = np.exp(logp_est + std_logp_est ** 2 / 2)
+    std_p_est = np.sqrt(np.exp(2 * logp_est + std_logp_est ** 2) * (np.exp(std_logp_est ** 2) - 1))
     # calculate stock-level predictions of log-prices
     logp_pred = np.dot(phi.numpy(), np.array([1 + tt_pred]) ** np.arange(order + 1)[:, None])
     std_logp_pred = np.log(1 + np.exp(psi.numpy() + tt_pred))
-    std_p_est = np.sqrt(np.exp(2 * logp_est + std_logp_est ** 2) * (np.exp(std_logp_est ** 2) - 1))
     # calculate stock-level prediction of prices
     p_pred = np.exp(logp_pred + std_logp_pred ** 2 / 2)
     std_p_pred = np.sqrt(np.exp(2 * logp_pred + std_logp_pred ** 2) * (np.exp(std_logp_pred ** 2) - 1))
@@ -339,26 +348,47 @@ if __name__ == '__main__':
     ranked_rating = np.array(list(si.keys())).repeat(list(np.diff(list(si.values()))) + [num_stocks - list(si.values())[-1]]).tolist()
 
     if not args.no_plots:
+        ## information for plotting
+        # find unique names of sectors
+        usectors = np.unique(data['sectors'])
+        num_sectors = len(usectors)
+        # determine which sectors were not available to avoid plotting
+        NA_sectors = np.where(np.array([sec[:2] for sec in usectors]) == "NA")[0]
+        num_NA_sectors = len(NA_sectors)
+        # provide sector IDs at stock-level
+        sectors_id = [np.where(usectors == sector)[0][0] for sector in data['sectors']]
+        # find unique names of industries and store indices
+        uindustries = np.unique(data['industries'])
+        num_industries = len(uindustries)
+        # determine which industries were not available to avoid plotting
+        NA_industries = np.where(np.array([ind[:2] for ind in uindustries]) == "NA")[0]
+        num_NA_industries = len(NA_industries)
+        # provide industry IDs at stock-level
+        industries_id = [np.where(uindustries == industry)[0][0] for industry in data['industries']]
+        # ranked volume at stock level
+        ranked_volume = data["volume"][rank]
+
         print('\nPlotting market estimation...')
         fig = plt.figure(figsize=(10,3))
         left_mkt_est = np.maximum(0, p_mkt_est - 2 * std_p_mkt_est)
         right_mkt_est = p_mkt_est + 2 * std_p_mkt_est
 
-        plt.plot(data["dates"], p_mkt_est[0], label="market estimation", color="C1")
-        plt.fill_between(data["dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 2 st. dev.", color="C0")
-        plt.legend(loc="upper left")
+        plt.title("Market", fontsize=15)
+        l1 = plt.plot(data["dates"], p_mkt_est[0], label="trend", color="C1")
+        l2 = plt.fill_between(data["dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 2 st. dev.", color="C0")
+        plt.ylabel("avg. price", fontsize=12)
+        plt.twinx()
+        l3 = plt.bar(data["dates"], ranked_volume.mean(0), width=1, color='g', alpha=0.2, label='avg. volume')
+        plt.ylabel("avg. volume", fontsize=12)
+        ll = l1 + [l2] + [l3]
+        labels = [l.get_label() for l in ll]
+        plt.legend(ll, labels, loc="upper left")
         fig_name = 'market_estimation.png'
         fig.savefig(fig_name, dpi=fig.dpi)
         print('Market estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
 
         num_columns = 3
         print('\nPlotting sector estimation...')
-        # determine which sectors were not available to avoid plotting
-        usectors = np.unique(data["sectors"])
-        num_sectors = len(usectors)
-        NA_sectors = np.where(np.array([sec[:2] for sec in usectors]) == "NA")[0]
-        num_NA_sectors = len(NA_sectors)
-
         left_sec_est = np.maximum(0, p_sec_est - 2 * std_p_sec_est)
         right_sec_est = p_sec_est + 2 * std_p_sec_est
         fig = plt.figure(figsize=(20, max(num_sectors - num_NA_sectors, 5)))
@@ -368,22 +398,24 @@ if __name__ == '__main__':
                 j += 1
                 plt.subplot(int(np.ceil((num_sectors - num_NA_sectors) / num_columns)), num_columns, j)
                 plt.title(usectors[i], fontsize=15)
-                plt.plot(data["dates"], p_sec_est[i], label="sector estimation", color="C1")
-                plt.fill_between(data["dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
-                plt.yticks(fontsize=12)
+                l1 = plt.plot(data["dates"], p_sec_est[i], label="trend", color="C1")
+                l2 = plt.fill_between(data["dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
+                plt.ylabel("avg. price", fontsize=12)
                 plt.xticks(rotation=45)
-                plt.legend(loc="upper left")
+                plt.twinx()
+                l3 = plt.bar(data["dates"], data['volume'][np.where(np.array(sectors_id) == i)[0]].reshape(-1, num_dates).mean(0),
+                             width=1, color='g', alpha=0.2, label='avg. volume')
+                plt.ylabel("avg. volume", fontsize=12)
+                ll = l1 + [l2] + [l3]
+                labels = [l.get_label() for l in ll]
+                plt.legend(ll, labels, loc="upper left")
+
         plt.tight_layout()
         fig_name = 'sector_estimation.png'
         fig.savefig(fig_name, dpi=fig.dpi)
         print('Sector estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
 
         print('\nPlotting industry estimation...')
-        uindustries = np.unique(data["industries"])
-        num_industries = len(uindustries)
-        NA_industries = np.where(np.array([ind[:2] for ind in uindustries]) == "NA")[0]
-        num_NA_industries = len(NA_industries)
-
         left_ind_est = np.maximum(0, p_ind_est - 2 * std_p_ind_est)
         right_ind_est = p_ind_est + 2 * std_p_ind_est
         fig = plt.figure(figsize=(20, max(num_industries - num_NA_industries, 5)))
@@ -393,11 +425,17 @@ if __name__ == '__main__':
                 j += 1
                 plt.subplot(int(np.ceil((num_industries - num_NA_industries) / num_columns)), num_columns, j)
                 plt.title(uindustries[i], fontsize=15)
-                plt.plot(data["dates"], p_ind_est[i], label="industry estimation", color="C1")
-                plt.fill_between(data["dates"], left_ind_est[i], right_ind_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
-                plt.yticks(fontsize=12)
+                l1 = plt.plot(data["dates"], p_ind_est[i], label="trend", color="C1")
+                l2 = plt.fill_between(data["dates"], left_ind_est[i], right_ind_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
+                plt.ylabel("avg. price", fontsize=12)
                 plt.xticks(rotation=45)
-                plt.legend(loc="upper left")
+                plt.twinx()
+                l3 = plt.bar(data["dates"], data['volume'][np.where(np.array(industries_id) == i)[0]].reshape(-1, num_dates).mean(0),
+                             width=1, color='g', alpha=0.2, label='avg. volume')
+                plt.ylabel("avg. volume", fontsize=12)
+                ll = l1 + [l2] + [l3]
+                labels = [l.get_label() for l in ll]
+                plt.legend(ll, labels, loc="upper left")
         plt.tight_layout()
         fig_name = 'industry_estimation.png'
         fig.savefig(fig_name, dpi=fig.dpi)
@@ -419,12 +457,19 @@ if __name__ == '__main__':
                     j += 1
                     plt.subplot(int(np.ceil(num_out_trend / num_columns)), num_columns, j)
                     plt.title(ranked_tickers[i], fontsize=15)
-                    plt.plot(data["dates"], ranked_p[i], label="data")
-                    plt.plot(data["dates"], ranked_p_est[i], label="stock estimation")
-                    plt.fill_between(data["dates"], ranked_left_est[i], ranked_right_est[i], alpha=0.2, label="+/- 2 st. dev.")
+                    l1 = plt.plot(data["dates"], ranked_p[i], label="price")
+                    l2 = plt.plot(data["dates"], ranked_p_est[i], label="trend")
+                    l3 = plt.fill_between(data["dates"], ranked_left_est[i], ranked_right_est[i], alpha=0.2,
+                                          label="+/- 2 st. dev.")
                     plt.yticks(fontsize=12)
                     plt.xticks(rotation=45)
-                    plt.legend(loc="upper left")
+                    plt.ylabel("price", fontsize=12)
+                    plt.twinx()
+                    l4 = plt.bar(data["dates"], ranked_volume[i], width=1, color='g', alpha=0.2, label='volume')
+                    plt.ylabel("volume", fontsize=12)
+                    ll = l1 + l2 + [l3] + [l4]
+                    labels = [l.get_label() for l in ll]
+                    plt.legend(ll, labels, loc="upper left")
             plt.tight_layout()
             fig_name = 'stock_estimation.png'
             fig.savefig(fig_name, dpi=fig.dpi)
