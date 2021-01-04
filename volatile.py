@@ -12,7 +12,6 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
 
-
 def load_data(tickers: list):
     """
     Load relevant information from provided tickers.
@@ -156,7 +155,7 @@ def define_model(tt: np.array, order_scale: np.array, sectors: list, industries:
            # psi
            lambda psi_i: tfd.Normal(loc=tf.gather(psi_i, industries_id, axis=0), scale=0.5),
            # y
-           lambda psi, psi_i, psi_s, psi_m, phi: tfd.Normal(loc=tf.tensordot(phi, tt, axes=1), scale=tf.math.softplus(psi + 1 - tt[1]))])
+           lambda psi, psi_i, psi_s, psi_m, phi: tfd.Normal(loc=tf.tensordot(phi, tt, axes=1), scale=tf.math.softplus(psi))])
 
 def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tensor, psi_m: tf.Tensor, psi_s: tf.Tensor,
              psi_i: tf.Tensor, psi: tf.Tensor, model: tfd.JointDistributionSequentialAutoBatched, logp: np.array,
@@ -212,6 +211,17 @@ def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tenso
         print('Loss function decay plot has been saved in this directory as {}.'.format(fig_name))
     return phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi
 
+def softplus(x: np.array):
+    """
+    It is a function from real to positive numbers
+
+    Parameters
+    ----------
+    x: np.array
+        Real value.
+    """
+    return np.log(1 + np.exp(x))
+
 def order_selection(logp: np.array, orders: np.array = np.arange(1, 14), horizon: int = 5):
     print("\nModel selection in progress. This can take a few minutes...")
     t = logp[:, :-horizon].shape[1]
@@ -223,7 +233,7 @@ def order_selection(logp: np.array, orders: np.array = np.arange(1, 14), horizon
         # reweighing factors for parameters corresponding to different orders of the polynomial
         order_scale = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
         # prediction times up to horizon
-        tt_pred = ((np.arange(1, 1 + horizon) / t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+        tt_pred = (1 + (np.arange(1, 1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1).astype('float32')
 
         # training the model
         model = define_model(tt, order_scale, data['sectors'], data['industries'])
@@ -231,11 +241,11 @@ def order_selection(logp: np.array, orders: np.array = np.arange(1, 14), horizon
                                                               range(8))
         phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = training(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi,
                                                                       model, logp[:, :-horizon])
-        logp_pred = np.dot(phi.numpy(), np.array([1 + tt_pred[1]]) ** np.arange(order + 1)[:, None])
-        std_logp_pred = np.log(1 + np.exp(psi.numpy() + tt_pred[1]))
+        logp_pred = np.dot(phi.numpy(), tt_pred)
+        std_logp_pred = softplus(psi.numpy())
         scores = (logp_pred - logp[:, -horizon:]) / std_logp_pred
         loss = np.abs(np.mean(scores ** 2) - 1)
-        print(order, loss)
+        print("Loss value for backtested polynomial model of order {}: {}.".format(order, loss))
         if i > 0 and loss > min_loss:
             count += 1
         else:
@@ -283,7 +293,7 @@ if __name__ == '__main__':
     # reweighing factors for parameters corresponding to different orders of the polynomial
     order_scale = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
     # prediction times up to horizon
-    tt_pred = np.arange(1 + horizon) / t
+    tt_pred = (1 + (np.arange(1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1).astype('float32')
 
     # training the model
     model = define_model(tt, order_scale, data['sectors'], data['industries'])
@@ -292,31 +302,31 @@ if __name__ == '__main__':
                                                                   model, data["logp"], plot_loss=args.plot_loss)
     # calculate stock-level estimators of log-prices
     logp_est = np.dot(phi.numpy(), tt)
-    std_logp_est = np.log(1 + np.exp(psi.numpy() + 1 - tt[1]))
+    std_logp_est = softplus(psi.numpy())
     # calculate stock-level estimators of prices
     p_est = np.exp(logp_est + std_logp_est ** 2 / 2)
     std_p_est = np.sqrt(np.exp(2 * logp_est + std_logp_est ** 2) * (np.exp(std_logp_est ** 2) - 1))
     # calculate stock-level predictions of log-prices
-    logp_pred = np.dot(phi.numpy(), np.array([1 + tt_pred]) ** np.arange(order + 1)[:, None])
-    std_logp_pred = np.log(1 + np.exp(psi.numpy() + tt_pred))
+    logp_pred = np.dot(phi.numpy(), tt_pred)
+    std_logp_pred = softplus(psi.numpy())
     # calculate stock-level prediction of prices
     p_pred = np.exp(logp_pred + std_logp_pred ** 2 / 2)
     std_p_pred = np.sqrt(np.exp(2 * logp_pred + std_logp_pred ** 2) * (np.exp(std_logp_pred ** 2) - 1))
     # calculate industry-level estimators of log-prices
     logp_ind_est = np.dot(phi_i.numpy(), tt)
-    std_logp_ind_est = np.log(1 + np.exp(psi_i.numpy() + 1 - tt[1]))
+    std_logp_ind_est = softplus(psi_i.numpy())
     # calculate industry-level estimators of prices
     p_ind_est = np.exp(logp_ind_est + std_logp_ind_est ** 2 / 2)
     std_p_ind_est = np.sqrt(np.exp(2 * logp_ind_est + std_logp_ind_est ** 2) * (np.exp(std_logp_ind_est ** 2) - 1))
     # calculate sector-level estimators of log-prices
     logp_sec_est = np.dot(phi_s.numpy(), tt)
-    std_logp_sec_est = np.log(1 + np.exp(psi_s.numpy() + 1 - tt[1]))
+    std_logp_sec_est = softplus(psi_s.numpy())
     # calculate sector-level estimators of prices
     p_sec_est = np.exp(logp_sec_est + std_logp_sec_est ** 2 / 2)
     std_p_sec_est = np.sqrt(np.exp(2 * logp_sec_est + std_logp_sec_est ** 2) * (np.exp(std_logp_sec_est ** 2) - 1))
     # calculate market-level estimators of log-prices
     logp_mkt_est = np.dot(phi_m.numpy(), tt)
-    std_logp_mkt_est = np.log(1 + np.exp(psi_m.numpy() + 1 - tt[1]))
+    std_logp_mkt_est = softplus(psi_m.numpy())
     # calculate market-level estimators of prices
     p_mkt_est = np.exp(logp_mkt_est + std_logp_mkt_est ** 2 / 2)
     std_p_mkt_est = np.sqrt(np.exp(2 * logp_mkt_est + std_logp_mkt_est ** 2) * (np.exp(std_logp_mkt_est ** 2) - 1))
@@ -324,7 +334,7 @@ if __name__ == '__main__':
     print("Training completed.")
 
     # calculate score
-    scores = ((logp_pred[:, horizon] - data["logp"][:, -1]) / std_logp_pred[:, horizon])
+    scores = ((logp_pred[:, horizon] - data["logp"][:, -1]) / std_logp_pred.squeeze())
     # rank according to score
     rank = np.argsort(scores)[::-1]
     ranked_tickers = np.array(tickers)[rank]
