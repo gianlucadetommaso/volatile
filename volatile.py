@@ -104,112 +104,131 @@ def load_data(tickers: list):
         for row in stock_info:
             wr.writerow(row)
 
-    return dict(tickers=tickers, dates=pd.to_datetime(dfp.index).date, sectors=sectors, industries=industries, logp=logp,
-    volume=volume)
+    return dict(tickers=tickers, stock_dates=pd.to_datetime(dfp.index).date, volume_dates=pd.to_datetime(dfv.index).date,
+                sectors=sectors, industries=industries, logp=logp, volume=volume)
 
-def define_model(tt: np.array, order_scale: np.array, sectors: list, industries: list):
+def define_model(info: dict, level: str = "stock"):
     """
     Define and return graphical model.
 
     Parameters
     ----------
-    tt: np.array
-        Time sequence corresponding to dates in the data. It is sed to construct polynomial model and reweigh likelihood 
-        scale.
-    order_scale: np.array
-        It reweighs prior scales of parameters at different orders of the polynomial.
-    sectors: list
-        Sectors at stock-level.
-    industries: list
-        Industries at stock-level.
+    info: dict
+        Data information.
+    level: str
+        Level of the model; possible candidates are "stock", "industry", "sector" and "market".
     """
-    # find unique names of sectors
-    usectors = np.unique(sectors)
-    num_sectors = len(usectors)
-    # provide sector IDs at stock-level
-    sectors_id = [np.where(usectors == sector)[0][0] for sector in sectors]
-    # find unique names of industries and store indices
-    uindustries, industries_idx = np.unique(industries, return_index=True)
-    # provide industry IDs at stock-level
-    industries_id = [np.where(uindustries == industry)[0][0] for industry in industries]
-    # provide sector IDs at industry-level
-    sectors_industry_id = np.array(sectors_id)[industries_idx].tolist()
-    # order of the polynomial model
-    order = len(order_scale) - 1
+    tt = info['tt']
+    order_scale = info['order_scale']
+    order =  len(order_scale) - 1
+    num_sectors = info['num_sectors']
+    sec2ind_id = info['sector_industries_id']
+    ind_id = info['industries_id']
 
-    return tfd.JointDistributionSequentialAutoBatched([
-           # phi_m
-           tfd.Normal(loc=tf.zeros([1, order + 1]), scale=4 * order_scale),
-           # phi_s
-           lambda phi_m: tfd.Normal(loc=tf.repeat(phi_m, num_sectors, axis=0), scale=2 * order_scale),
-           # phi_i
-           lambda phi_s: tfd.Normal(loc=tf.gather(phi_s, sectors_industry_id, axis=0), scale=order_scale),
-           # phi
-           lambda phi_i: tfd.Normal(loc=tf.gather(phi_i, industries_id, axis=0), scale=0.5 * order_scale),
-           # psi_m
-           tfd.Normal(loc=0, scale=4),
-           # psi_s
-           lambda psi_m: tfd.Normal(loc=psi_m, scale=2 * tf.ones([num_sectors, 1])),
-           # psi_i
-           lambda psi_s: tfd.Normal(loc=tf.gather(psi_s, sectors_industry_id, axis=0), scale=1),
-           # psi
-           lambda psi_i: tfd.Normal(loc=tf.gather(psi_i, industries_id, axis=0), scale=0.5),
-           # y
-           lambda psi, psi_i, psi_s, psi_m, phi: tfd.Normal(loc=tf.tensordot(phi, tt, axes=1), scale=tf.math.softplus(psi))])
+    available_levels = ["market", "sector", "industry", "stock"]
+    if level not in available_levels:
+        raise Exception("Selected level is unknown. Please provide one of the following levels: {}.".format(available_levels))
 
-def training(phi_m: tf.Tensor, phi_s: tf.Tensor, phi_i: tf.Tensor, phi: tf.Tensor, psi_m: tf.Tensor, psi_s: tf.Tensor,
-             psi_i: tf.Tensor, psi: tf.Tensor, model: tfd.JointDistributionSequentialAutoBatched, logp: np.array,
-             learning_rate: float = 0.01, num_steps: int =10000, plot_loss: bool = False):
+    m = [tfd.Normal(loc=tf.zeros([1, order + 1]), scale=4 * order_scale), # phi_m
+         tfd.Normal(loc=0, scale=4)] # psi_m
+
+    if level != "market":
+        m += [lambda psi_m, phi_m: tfd.Normal(loc=tf.repeat(phi_m, num_sectors, axis=0), scale=2 * order_scale), # phi_s
+              lambda phi_s, psi_m: tfd.Normal(loc=psi_m, scale=2 * tf.ones([num_sectors, 1]))] # psi_s
+
+        if level != "sector":
+            sec2ind_id = info['sector_industries_id']
+            m += [lambda psi_s, phi_s: tfd.Normal(loc=tf.gather(phi_s, sec2ind_id, axis=0), scale=order_scale), # phi_i
+                  lambda phi_i, psi_s: tfd.Normal(loc=tf.gather(psi_s, sec2ind_id, axis=0), scale=1)] # psi_ii
+
+            if level != "industry":
+                ind_id = info['industries_id']
+                m += [lambda psi_i, phi_i: tfd.Normal(loc=tf.gather(phi_i, ind_id, axis=0), scale=0.5 * order_scale), # phi
+                      lambda phi, psi_i: tfd.Normal(loc=tf.gather(psi_i, ind_id, axis=0), scale=0.5)]  # psi
+
+    if level == "market":
+        m += [lambda psi_m, phi_m: tfd.Normal(loc=tf.tensordot(phi_m, tt, axes=1), scale=tf.math.softplus(psi_m))] # y
+    if level == "sector":
+        m += [lambda psi_s, phi_s: tfd.Normal(loc=tf.tensordot(phi_s, tt, axes=1), scale=tf.math.softplus(psi_s))] # y
+    if level == "industry":
+        m += [lambda psi_i, phi_i: tfd.Normal(loc=tf.tensordot(phi_i, tt, axes=1), scale=tf.math.softplus(psi_i))] # y
+    if level == "stock":
+        m += [lambda psi, phi: tfd.Normal(loc=tf.tensordot(phi, tt, axes=1), scale=tf.math.softplus(psi))] # y
+
+    return tfd.JointDistributionSequentialAutoBatched(m)
+
+def training(logp: np.array, info: dict, learning_rate: float = 0.01, num_steps: int = 20000, plot_losses: bool = False):
     """
-    It performs optimization over the model parameters via Adam optimizer.
+    It performs sequential optimization over the model parameters via Adam optimizer, training at different levels to
+    provide sensible initial solutions at finer levels.
 
     Parameters
     ----------
-    phi_m: tf.Tensor
-        Initial value of market-level polynomial parameter.
-    phi_s: tf.Tensor
-        Initial values of sector-level polynomial parameters.
-    phi_i: tf.Tensor
-        Initial values of industry-level polynomial parameters.
-    phi: tf.Tensor
-        Initial values of stock-level polynomial parameters.
-    psi_m: tf.Tensor
-        Initial values of market-level likelihood scale parameter.
-    psi_s: tf.Tensor
-        Initial values of sector-level likelihood scale parameters.
-    psi_i: tf.Tensor
-        Initial values of industry-level likelihood scale parameters.
-    psi: tf.Tensor
-        Initial values of stock-level likelihood scale parameters.
-    model: tfd.JointDistributionSequentialAutoBatched
-        Graphical model to train.
     logp: np.array
-        Log-price stock information.
+        Log-price at stock-level.
+    info: dict
+        Data information.
     learning_rate: float
         Adam's fixed learning rate.
     num_steps: int
         Adam's fixed number of iterations.
-    plot_loss: bool
-        If True, a loss function decay plot is saved in the current directory.
+    plot_losses: bool
+        If True, a losses decay plot is saved in the current directory.
 
     Returns
     -------
     It returns trained parameters.
     """
-    def log_posterior(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi, logp):
-        return model.log_prob([phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi, logp])
-    loss = tfp.math.minimize(lambda: -log_posterior(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi, logp),
-                             optimizer=tf.optimizers.Adam(learning_rate=learning_rate),
-                             num_steps=num_steps)
-    if plot_loss:
-        fig_name = 'loss_decay.png'
-        fig = plt.figure(figsize=(10, 3))
+    optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
+    num_steps_l = int(np.ceil(num_steps // 4))
+
+    # market
+    model = define_model(info, "market")
+    phi_m, psi_m = (tf.Variable(tf.zeros_like(model.sample()[:2][i])) for i in range(2))
+    loss_m = tfp.math.minimize(lambda: -model.log_prob([phi_m, psi_m, logp.mean(0, keepdims=1)]),
+                             optimizer=optimizer, num_steps=num_steps_l)
+    # sector
+    model = define_model(info, "sector")
+    phi_m, psi_m = tf.constant(phi_m), tf.constant(psi_m)
+    phi_s, psi_s = (tf.Variable(tf.zeros_like(model.sample()[2:4][i])) for i in range(2))
+    logp_s = np.array([logp[np.where(np.array(info['sectors_id']) == k)[0]].mean(0) for k in range(info['num_sectors'])])
+    loss_s = tfp.math.minimize(lambda: -model.log_prob([phi_m, psi_m, phi_s, psi_s, logp_s]),
+                             optimizer=optimizer, num_steps=num_steps_l)
+
+    # industry
+    model = define_model(info, "industry")
+    phi_s, psi_s = tf.constant(phi_s), tf.constant(psi_s)
+    phi_i, psi_i = (tf.Variable(tf.zeros_like(model.sample()[4:6][i])) for i in range(2))
+    logp_i = np.array([logp[np.where(np.array(info['industries_id']) == k)[0]].mean(0) for k in range(info['num_industries'])])
+    loss_i = tfp.math.minimize(lambda: -model.log_prob([phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, logp_i]),
+                             optimizer=optimizer, num_steps=num_steps_l)
+    # stock
+    model = define_model(info, "stock")
+    phi_i, psi_i = tf.constant(phi_i), tf.constant(psi_i)
+    phi, psi = (tf.Variable(tf.zeros_like(model.sample()[6:8][i])) for i in range(2))
+    loss = tfp.math.minimize(lambda: -model.log_prob([phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi, logp]),
+                             optimizer=optimizer, num_steps=num_steps_l)
+
+    if plot_losses:
+        fig_name = 'losses_decay.png'
+        fig = plt.figure(figsize=(20, 3))
+        plt.subplot(141)
+        plt.title("market-level", fontsize=12)
+        plt.plot(loss_m)
+        plt.subplot(142)
+        plt.title("sector-level", fontsize=12)
+        plt.plot(loss_s)
+        plt.subplot(143)
+        plt.title("industry-level", fontsize=12)
+        plt.plot(loss_i)
+        plt.subplot(144)
+        plt.title("stock-level", fontsize=12)
         plt.plot(loss)
-        plt.legend(["loss decay"])
-        plt.xlabel("iteration")
+        plt.legend(["loss decay"], fontsize=12, loc="upper right")
+        plt.xlabel("iteration", fontsize=12)
         fig.savefig(fig_name, dpi=fig.dpi)
-        print('Loss function decay plot has been saved in this directory as {}.'.format(fig_name))
-    return phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi
+        print('Losses decay plot has been saved in this directory as {}.'.format(fig_name))
+    return phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi
 
 def softplus(x: np.array):
     """
@@ -222,29 +241,39 @@ def softplus(x: np.array):
     """
     return np.log(1 + np.exp(x))
 
-def order_selection(logp: np.array, orders: np.array = np.arange(1, 14), horizon: int = 5):
+def order_selection(logp: np.array, info: dict, orders: np.array = np.arange(1, 14), horizon: int = 5):
+    """
+    It is a function from real to positive numbers
+
+    Parameters
+    ----------
+    logp: np.array
+        Log-prices at stock-level.
+    info: dict
+        Data information.
+    orders: np.array
+        Array of candidate orders.
+    horizon: int
+        Number of days to evaluate prediction.
+    """
     print("\nModel selection in progress. This can take a few minutes...")
     t = logp[:, :-horizon].shape[1]
     min_loss = np.inf
     count = 0
     for i, order in enumerate(orders):
-        # times corresponding to trading dates in the data
-        tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
-        # reweighing factors for parameters corresponding to different orders of the polynomial
-        order_scale = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
-        # prediction times up to horizon
-        tt_pred = (1 + (np.arange(1, 1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1).astype('float32')
+        info['tt'] = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+        info['order_scale'] = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
 
         # training the model
-        model = define_model(tt, order_scale, data['sectors'], data['industries'])
-        phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = (tf.Variable(tf.zeros_like(model.sample()[:-1][i])) for i in
-                                                              range(8))
-        phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = training(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi,
-                                                                      model, logp[:, :-horizon])
+        phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = training(logp[:, :-horizon], info)
+
+        # construct loss
+        tt_pred = ((1 + (np.arange(1, 1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
         logp_pred = np.dot(phi.numpy(), tt_pred)
         std_logp_pred = softplus(psi.numpy())
         scores = (logp_pred - logp[:, -horizon:]) / std_logp_pred
         loss = np.abs(np.mean(scores ** 2) - 1)
+
         print("Loss value for backtested polynomial model of order {}: {}.".format(order, loss))
         if i > 0 and loss > min_loss:
             count += 1
@@ -265,7 +294,7 @@ if __name__ == '__main__':
                      help='Save prediction table in csv format.')
     cli.add_argument('--no-plots', action='store_true',
                      help='Plot estimates with their uncertainty over time.')
-    cli.add_argument('--plot-loss', action='store_true',
+    cli.add_argument('--plot-losses', action='store_true',
                      help='Plot loss function decay over training iterations.')
     args = cli.parse_args()
 
@@ -277,55 +306,66 @@ if __name__ == '__main__':
             args.symbols = my_file.readlines()[0].split(" ")
     data = load_data(args.symbols)
     tickers = data["tickers"]
-    num_stocks, num_dates = data['logp'].shape
+    num_stocks, t = data['logp'].shape
+
+    # find unique names of sectors
+    usectors = np.unique(data['sectors'])
+    num_sectors = len(usectors)
+    # provide sector IDs at stock-level
+    sectors_id = [np.where(usectors == sector)[0][0] for sector in data['sectors']]
+    # find unique names of industries and store indices
+    uindustries, industries_idx = np.unique(data['industries'], return_index=True)
+    num_industries = len(uindustries)
+    # provide industry IDs at stock-level
+    industries_id = [np.where(uindustries == industry)[0][0] for industry in data['industries']]
+    # provide sector IDs at industry-level
+    sector_industries_id = np.array(sectors_id)[industries_idx].tolist()
+
+    # place relevant information in dictionary
+    info = dict(num_sectors=num_sectors, num_industries=num_industries, sector_industries_id=sector_industries_id,
+                industries_id=industries_id, sectors_id=sectors_id)
 
     # how many days to look ahead when comparing the current price against a prediction
     horizon = 5
     # order of the polynomial
-    order = order_selection(data['logp'])
+    order = order_selection(data['logp'], info)
 
     print("\nTraining the model...")
 
-    # number of trading dates in the data
-    t = data["logp"].shape[1]
     # times corresponding to trading dates in the data
-    tt = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+    info['tt'] = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
     # reweighing factors for parameters corresponding to different orders of the polynomial
-    order_scale = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
-    # prediction times up to horizon
-    tt_pred = (1 + (np.arange(1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1).astype('float32')
+    info['order_scale'] = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
 
     # training the model
-    model = define_model(tt, order_scale, data['sectors'], data['industries'])
-    phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = (tf.Variable(tf.zeros_like(model.sample()[:-1][i])) for i in range(8))
-    phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi = training(phi_m, phi_s, phi_i, phi, psi_m, psi_s, psi_i, psi,
-                                                                  model, data["logp"], plot_loss=args.plot_loss)
+    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = training(data['logp'], info, plot_losses=args.plot_losses)
     # calculate stock-level estimators of log-prices
-    logp_est = np.dot(phi.numpy(), tt)
+    logp_est = np.dot(phi.numpy(), info['tt'])
     std_logp_est = softplus(psi.numpy())
     # calculate stock-level estimators of prices
     p_est = np.exp(logp_est + std_logp_est ** 2 / 2)
     std_p_est = np.sqrt(np.exp(2 * logp_est + std_logp_est ** 2) * (np.exp(std_logp_est ** 2) - 1))
     # calculate stock-level predictions of log-prices
+    tt_pred = ((1 + (np.arange(1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
     logp_pred = np.dot(phi.numpy(), tt_pred)
     std_logp_pred = softplus(psi.numpy())
     # calculate stock-level prediction of prices
     p_pred = np.exp(logp_pred + std_logp_pred ** 2 / 2)
     std_p_pred = np.sqrt(np.exp(2 * logp_pred + std_logp_pred ** 2) * (np.exp(std_logp_pred ** 2) - 1))
     # calculate industry-level estimators of log-prices
-    logp_ind_est = np.dot(phi_i.numpy(), tt)
+    logp_ind_est = np.dot(phi_i.numpy(), info['tt'])
     std_logp_ind_est = softplus(psi_i.numpy())
     # calculate industry-level estimators of prices
     p_ind_est = np.exp(logp_ind_est + std_logp_ind_est ** 2 / 2)
     std_p_ind_est = np.sqrt(np.exp(2 * logp_ind_est + std_logp_ind_est ** 2) * (np.exp(std_logp_ind_est ** 2) - 1))
     # calculate sector-level estimators of log-prices
-    logp_sec_est = np.dot(phi_s.numpy(), tt)
+    logp_sec_est = np.dot(phi_s.numpy(), info['tt'])
     std_logp_sec_est = softplus(psi_s.numpy())
     # calculate sector-level estimators of prices
     p_sec_est = np.exp(logp_sec_est + std_logp_sec_est ** 2 / 2)
     std_p_sec_est = np.sqrt(np.exp(2 * logp_sec_est + std_logp_sec_est ** 2) * (np.exp(std_logp_sec_est ** 2) - 1))
     # calculate market-level estimators of log-prices
-    logp_mkt_est = np.dot(phi_m.numpy(), tt)
+    logp_mkt_est = np.dot(phi_m.numpy(), info['tt'])
     std_logp_mkt_est = softplus(psi_m.numpy())
     # calculate market-level estimators of prices
     p_mkt_est = np.exp(logp_mkt_est + std_logp_mkt_est ** 2 / 2)
@@ -377,6 +417,8 @@ if __name__ == '__main__':
         industries_id = [np.where(uindustries == industry)[0][0] for industry in data['industries']]
         # ranked volume at stock level
         ranked_volume = data["volume"][rank]
+        # number of volume dates
+        vt = len(data["volume_dates"])
 
         print('\nPlotting market estimation...')
         fig = plt.figure(figsize=(10,3))
@@ -384,13 +426,14 @@ if __name__ == '__main__':
         right_mkt_est = p_mkt_est + 2 * std_p_mkt_est
 
         plt.title("Market", fontsize=15)
-        l1 = plt.plot(data["dates"], p_mkt_est[0], label="trend", color="C1")
-        l2 = plt.fill_between(data["dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 2 st. dev.", color="C0")
+        l1 = plt.plot(data["stock_dates"], np.exp(data['logp'].mean(0)), label="avg. price", color="C0")
+        l2 = plt.plot(data["stock_dates"], p_mkt_est[0], label="trend", color="C1")
+        l3 = plt.fill_between(data["stock_dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 2 st. dev.", color="C0")
         plt.ylabel("avg. price", fontsize=12)
         plt.twinx()
-        l3 = plt.bar(data["dates"], ranked_volume.mean(0), width=1, color='g', alpha=0.2, label='avg. volume')
+        l4 = plt.bar(data["volume_dates"], ranked_volume.mean(0), width=1, color='g', alpha=0.2, label='avg. volume')
         plt.ylabel("avg. volume", fontsize=12)
-        ll = l1 + [l2] + [l3]
+        ll = l1 + l2 + [l3] + [l4]
         labels = [l.get_label() for l in ll]
         plt.legend(ll, labels, loc="upper left")
         fig_name = 'market_estimation.png'
@@ -408,15 +451,17 @@ if __name__ == '__main__':
                 j += 1
                 plt.subplot(int(np.ceil((num_sectors - num_NA_sectors) / num_columns)), num_columns, j)
                 plt.title(usectors[i], fontsize=15)
-                l1 = plt.plot(data["dates"], p_sec_est[i], label="trend", color="C1")
-                l2 = plt.fill_between(data["dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
+                idx_sectors = np.where(np.array(sectors_id) == i)[0]
+                l1 = plt.plot(data["stock_dates"], np.exp(data['logp'][idx_sectors].reshape(-1, t).mean(0)), label="avg. price", color="C0")
+                l2 = plt.plot(data["stock_dates"], p_sec_est[i], label="trend", color="C1")
+                l3 = plt.fill_between(data["stock_dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
                 plt.ylabel("avg. price", fontsize=12)
                 plt.xticks(rotation=45)
                 plt.twinx()
-                l3 = plt.bar(data["dates"], data['volume'][np.where(np.array(sectors_id) == i)[0]].reshape(-1, num_dates).mean(0),
+                l4 = plt.bar(data["volume_dates"], data['volume'][np.where(np.array(sectors_id) == i)[0]].reshape(-1, vt).mean(0),
                              width=1, color='g', alpha=0.2, label='avg. volume')
                 plt.ylabel("avg. volume", fontsize=12)
-                ll = l1 + [l2] + [l3]
+                ll = l1 + l2 + [l3] + [l4]
                 labels = [l.get_label() for l in ll]
                 plt.legend(ll, labels, loc="upper left")
 
@@ -435,15 +480,18 @@ if __name__ == '__main__':
                 j += 1
                 plt.subplot(int(np.ceil((num_industries - num_NA_industries) / num_columns)), num_columns, j)
                 plt.title(uindustries[i], fontsize=15)
-                l1 = plt.plot(data["dates"], p_ind_est[i], label="trend", color="C1")
-                l2 = plt.fill_between(data["dates"], left_ind_est[i], right_ind_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
+                idx_industries = np.where(np.array(industries_id) == i)[0]
+                plt.title(uindustries[i], fontsize=15)
+                l1 = plt.plot(data["stock_dates"], np.exp(data['logp'][idx_industries].reshape(-1, t).mean(0)), label="avg. price", color="C0")
+                l2 = plt.plot(data["stock_dates"], p_ind_est[i], label="trend", color="C1")
+                l3 = plt.fill_between(data["stock_dates"], left_ind_est[i], right_ind_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
                 plt.ylabel("avg. price", fontsize=12)
                 plt.xticks(rotation=45)
                 plt.twinx()
-                l3 = plt.bar(data["dates"], data['volume'][np.where(np.array(industries_id) == i)[0]].reshape(-1, num_dates).mean(0),
+                l4 = plt.bar(data["volume_dates"], data['volume'][np.where(np.array(industries_id) == i)[0]].reshape(-1, vt).mean(0),
                              width=1, color='g', alpha=0.2, label='avg. volume')
                 plt.ylabel("avg. volume", fontsize=12)
-                ll = l1 + [l2] + [l3]
+                ll = l1 + l2 + [l3] + [l4]
                 labels = [l.get_label() for l in ll]
                 plt.legend(ll, labels, loc="upper left")
         plt.tight_layout()
@@ -467,15 +515,15 @@ if __name__ == '__main__':
                     j += 1
                     plt.subplot(int(np.ceil(num_out_trend / num_columns)), num_columns, j)
                     plt.title(ranked_tickers[i], fontsize=15)
-                    l1 = plt.plot(data["dates"], ranked_p[i], label="price")
-                    l2 = plt.plot(data["dates"], ranked_p_est[i], label="trend")
-                    l3 = plt.fill_between(data["dates"], ranked_left_est[i], ranked_right_est[i], alpha=0.2,
+                    l1 = plt.plot(data["stock_dates"], ranked_p[i], label="price")
+                    l2 = plt.plot(data["stock_dates"], ranked_p_est[i], label="trend")
+                    l3 = plt.fill_between(data["stock_dates"], ranked_left_est[i], ranked_right_est[i], alpha=0.2,
                                           label="+/- 2 st. dev.")
                     plt.yticks(fontsize=12)
                     plt.xticks(rotation=45)
                     plt.ylabel("price", fontsize=12)
                     plt.twinx()
-                    l4 = plt.bar(data["dates"], ranked_volume[i], width=1, color='g', alpha=0.2, label='volume')
+                    l4 = plt.bar(data["volume_dates"], ranked_volume[i], width=1, color='g', alpha=0.2, label='volume')
                     plt.ylabel("volume", fontsize=12)
                     ll = l1 + l2 + [l3] + [l4]
                     labels = [l.get_label() for l in ll]
