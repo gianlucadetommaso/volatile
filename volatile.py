@@ -40,9 +40,9 @@ def load_data(tickers: list):
     if dfp.ndim == 1:
         dfp = pd.DataFrame(dfp).rename(columns={"Adj Close": tickers[0]})
         dfv = pd.DataFrame(dfv).rename(columns={"Volume": tickers[0]})
-    # drop stocks that have at least two NaNs
-    rm_idx = np.union1d(np.where((dfp.isnull().sum(0) > 2) == True)[0],
-    np.where((dfv.isnull().sum(0) > 2) == True)[0])
+    # drop stocks that have NaNs in at least half for the entries
+    rm_idx = np.union1d(np.where((dfp.isnull().sum(0) > 0.33 * dfp.shape[0]) == True)[0],
+                        np.where((dfv.isnull().sum(0) > 0.33 * dfp.shape[0]) == True)[0])
     dfp.drop(columns=dfp.columns[rm_idx], inplace=True)
     dfv.drop(columns=dfv.columns[rm_idx], inplace=True)
     # raise exception if no stock is left
@@ -89,6 +89,11 @@ def load_data(tickers: list):
         else:
             try:
                 info = stocks[i // 254][i % 254].info
+                if ((type(info["sector"]) == float) and np.isnan(info["sector"])) |\
+                        ((type(info["industry"]) == float) and np.isnan(info["industry"])) |\
+                        ((type(info["sector"]) == str) and (len(info["sector"]) == 0)) |\
+                        ((type(info["industry"]) == str) and (len(info["industry"]) == 0)):
+                    raise Exception
                 sectors.append(info["sector"])
                 missing_sector[tickers[i]] = sectors[-1]
                 industries.append(info["industry"])
@@ -538,12 +543,12 @@ if __name__ == '__main__':
     print("\nPREDICTION TABLE")
     ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["sectors"])[rank]]
     ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["industries"])[rank]]
-    num_dashes = 126
+    num_dashes = 131
     print(num_dashes * "-")
-    print("{:<11} {:<26} {:<42} {:<25} {:<15}".format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATING"))
+    print("{:<15} {:<26} {:<42} {:<25} {:<15}".format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATING"))
     print(num_dashes * "-")
     for i in range(num_stocks):
-        print("{:<11} {:<26} {:<42} {:<25} {:<15}".format(ranked_tickers[i], ranked_sectors[i],
+        print("{:<15} {:<26} {:<42} {:<25} {:<15}".format(ranked_tickers[i], ranked_sectors[i],
                                                                         ranked_industries[i], ranked_p[i, -1],
                                                                         ranked_rating[i]))
         print(num_dashes * "-")

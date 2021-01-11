@@ -672,3 +672,438 @@ CLDR,Technology,Software—Application
 NMTR,Healthcare,Biotechnology
 ORTX,Healthcare,Biotechnology
 TEVA,Healthcare,Drug Manufacturers—Specialty & Generic
+A,Healthcare,Diagnostics & Research
+ALNY,Healthcare,Biotechnology
+AMGN,Healthcare,Drug Manufacturers—General
+AUPH,Healthcare,Biotechnology
+BMRN,Healthcare,Biotechnology
+CAH,Healthcare,Medical Distribution
+CERN,Healthcare,Health Information Services
+CHNG,Healthcare,Health Information Services
+CYTK,Healthcare,Biotechnology
+EHTH,Financial Services,Insurance Brokers
+ILMN,Healthcare,Diagnostics & Research
+INCY,Healthcare,Biotechnology
+INSM,Healthcare,Biotechnology
+LH,Healthcare,Diagnostics & Research
+LLY,Healthcare,Drug Manufacturers—General
+NEO,Healthcare,Diagnostics & Research
+REGN,Healthcare,Biotechnology
+SRPT,Healthcare,Biotechnology
+TPTX,Healthcare,Biotechnology
+ANGI,Communication Services,Internet Content & Information
+CALX,Technology,Software—Application
+CIEN,Technology,Communication Equipment
+CMBM,Technology,Communication Equipment
+FRPT,Consumer Defensive,Packaged Foods
+HEXO,Healthcare,Drug Manufacturers—Specialty & Generic
+JNPR,Technology,Communication Equipment
+LITE,Technology,Communication Equipment
+MSI,Technology,Communication Equipment
+SATS,Technology,Communication Equipment
+3KR.ST,Real Estate,Real Estate Services
+8TRA.ST,Industrials,Farm & Heavy Construction Machinery
+AAK.ST,Consumer Defensive,Packaged Foods
+ABB.ST,Industrials,Electrical Equipment & Parts
+ABSO.ST,Industrials,Specialty Industrial Machinery
+ACAD.ST,Consumer Defensive,Education & Training Services
+ACE.ST,Healthcare,Biotechnology
+ADAPT.ST,Real Estate,Real Estate Services
+ADDT-B.ST,Industrials,Industrial Distribution
+AEC.ST,Energy,Oil & Gas E&P
+AF-B.ST,Industrials,Engineering & Construction
+AJA-B.ST,Real Estate,Real Estate Services
+ALFA.ST,Industrials,Specialty Industrial Machinery
+ALIF-B.ST,Healthcare,Medical Instruments & Supplies
+ALIG.ST,Industrials,Specialty Industrial Machinery
+ALIV-SDB.ST,Consumer Cyclical,Auto Parts
+ALLG-B.ST,Technology,Communication Equipment
+ALM-PREF.ST,Real Estate,Real Estate—Diversified
+ALM.ST,Real Estate,Real Estate—Diversified
+AM1S.ST,Basic Materials,Paper & Paper Products
+AMAST-PREF.ST,Real Estate,Real Estate Services
+AMAST.ST,Real Estate,Real Estate Services
+AMBEA.ST,Healthcare,Medical Care Facilities
+ANOD-B.ST,Technology,Information Technology Services
+AOI.ST,Energy,Oil & Gas E&P
+AQ.ST,Industrials,Electrical Equipment & Parts
+ARION-SDB.ST,Financial Services,Banks—Regional
+ARISE.ST,Utilities,Utilities—Renewable
+ARJO-B.ST,Healthcare,Medical Distribution
+ARP.ST,Basic Materials,Paper & Paper Products
+ASPIRE.ST,Consumer Cyclical,Gambling
+ASSA-B.ST,Industrials,Security & Protection Services
+ATA-SDB.ST,Communication Services,Electronic Gaming & Multimedia
+ATCO-A.ST,Industrials,Specialty Industrial Machinery
+ATCO-B.ST,Industrials,Specialty Industrial Machinery
+ATRLJ-B.ST,Real Estate,Real Estate—Development
+ATT.ST,Healthcare,Medical Care Facilities
+ATVEXA-B.ST,Consumer Defensive,Education & Training Services
+AXFO.ST,Consumer Defensive,Food Distribution
+AXIC-A.ST,Healthcare,Biotechnology
+AZA.ST,Financial Services,Banks—Regional
+AZELIO.ST,Utilities,Utilities—Renewable
+AZN.ST,Healthcare,Drug Manufacturers—General
+BACTI-B.ST,Healthcare,Medical Devices
+BALCO.ST,Industrials,Building Products & Equipment
+BALD-B.ST,Real Estate,Real Estate—Diversified
+BAYN.ST,Consumer Defensive,Packaged Foods
+BEIA-B.ST,Industrials,Specialty Industrial Machinery
+BELE.ST,Technology,Scientific & Technical Instruments
+BERG-B.ST,Industrials,Tools & Accessories
+BESQ.ST,Real Estate,Real Estate—Diversified
+BETCO.ST,Technology,Software—Application
+BETS-B.ST,Consumer Cyclical,Gambling
+BHG.ST,Consumer Cyclical,Internet Retail
+BILI-A.ST,Consumer Cyclical,Auto & Truck Dealerships
+BILL.ST,Basic Materials,Paper & Paper Products
+BIM.ST,Technology,Software—Application
+BINV.ST,Healthcare,Biotechnology
+BIOA-B.ST,Healthcare,Biotechnology
+BIOG-B.ST,Healthcare,Drug Manufacturers—Specialty & Generic
+BIOT.ST,Healthcare,Medical Instruments & Supplies
+BIOVIC-B.ST,Healthcare,Biotechnology
+BMAX.ST,Industrials,Building Products & Equipment
+BOL.ST,Basic Materials,Other Industrial Metals & Mining
+BONAV-A.ST,Consumer Cyclical,Residential Construction
+BONAV-B.ST,Consumer Cyclical,Residential Construction
+BONEX.ST,Healthcare,Medical Instruments & Supplies
+BOOZT.ST,Consumer Cyclical,Apparel Retail
+BOUL.ST,Healthcare,Diagnostics & Research
+BRAV.ST,Industrials,Engineering & Construction
+BRE2.ST,Communication Services,Telecom Services
+BRG-B.ST,Basic Materials,Lumber & Wood Production
+BRIN-B.ST,Real Estate,Real Estate Services
+BTS-B.ST,Industrials,Consulting Services
+BUFAB.ST,Industrials,Industrial Distribution
+BULTEN.ST,Consumer Cyclical,Auto Parts
+BURE.ST,Financial Services,Asset Management
+BUSER.ST,Technology,Software—Application
+BYGGP.ST,Industrials,Engineering & Construction
+CALTX.ST,Healthcare,Drug Manufacturers—Specialty & Generic
+CAMX.ST,Healthcare,Biotechnology
+CANTA.ST,Healthcare,Biotechnology
+CAST.ST,Real Estate,Real Estate—Development
+CAT-A.ST,Financial Services,Asset Management
+CAT-B.ST,Financial Services,Asset Management
+CATE.ST,Real Estate,Real Estate—Diversified
+CCC.ST,Industrials,Specialty Industrial Machinery
+CEVI.ST,Healthcare,Medical Devices
+CI-B.ST,Industrials,Metal Fabrication
+CIBUS.ST,Real Estate,Real Estate Services
+CLA-B.ST,Consumer Defensive,Confectioners
+CLAS-B.ST,Consumer Cyclical,Specialty Retail
+CLIME-B.ST,Utilities,Utilities—Renewable
+CLNK-B.ST,Healthcare,Medical Devices
+COIC.ST,Industrials,Specialty Industrial Machinery
+COLL.ST,Financial Services,Credit Services
+COOR.ST,Industrials,Specialty Business Services
+CORE-A.ST,Real Estate,Real Estate Services
+CORE-B.ST,Real Estate,Real Estate Services
+CORE-PREF.ST,Real Estate,Real Estate Services
+CRAD-B.ST,Healthcare,Medical Devices
+CRED-A.ST,Financial Services,Asset Management
+CTM.ST,Consumer Cyclical,Gambling
+CTT.ST,Industrials,Aerospace & Defense
+DIOS.ST,Real Estate,Real Estate—Diversified
+DMYD-B.ST,Healthcare,Biotechnology
+DOM.ST,Technology,Consumer Electronics
+DORO.ST,Technology,Communication Equipment
+DUNI.ST,Consumer Defensive,Household & Personal Products
+DURC-B.ST,Industrials,Specialty Industrial Machinery
+DUST.ST,Technology,Information Technology Services
+EAST.ST,Financial Services,Asset Management
+EG7.ST,Communication Services,Electronic Gaming & Multimedia
+EKTA-B.ST,Healthcare,Medical Instruments & Supplies
+ELAN-B.ST,Industrials,Specialty Business Services
+ELOS-B.ST,Healthcare,Medical Instruments & Supplies
+ELTEL.ST,Industrials,Engineering & Construction
+ELUX-A.ST,Technology,Consumer Electronics
+ELUX-B.ST,Technology,Consumer Electronics
+EMBRAC-B.ST,Communication Services,Electronic Gaming & Multimedia
+ENEA.ST,Technology,Software—Application
+ENQ.ST,Energy,Oil & Gas E&P
+ENZY.ST,Healthcare,Drug Manufacturers—Specialty & Generic
+EOLU-B.ST,Industrials,Engineering & Construction
+EPI-A.ST,Industrials,Farm & Heavy Construction Machinery
+EPI-B.ST,Industrials,Farm & Heavy Construction Machinery
+EPRO-B.ST,Consumer Cyclical,"Furnishings, Fixtures & Appliances"
+EQT.ST,Financial Services,Asset Management
+ERIC-A.ST,Technology,Communication Equipment
+ERIC-B.ST,Technology,Communication Equipment
+ESSITY-A.ST,Consumer Defensive,Household & Personal Products
+ESSITY-B.ST,Consumer Defensive,Household & Personal Products
+ETX.ST,Utilities,Utilities—Renewable
+EVO.ST,Consumer Cyclical,Gambling
+EWRK.ST,Technology,Information Technology Services
+EXS.ST,Technology,Information Technology Services
+FABG.ST,Real Estate,Real Estate Services
+FAG.ST,Industrials,Electrical Equipment & Parts
+FASTAT.ST,Real Estate,Real Estate—Development
+FIL.ST,Basic Materials,Other Industrial Metals & Mining
+FING-B.ST,Technology,Scientific & Technical Instruments
+FLEXM.ST,Communication Services,Electronic Gaming & Multimedia
+FMM-B.ST,Industrials,Building Products & Equipment
+FNM.ST,Industrials,Industrial Distribution
+FOI-B.ST,Consumer Cyclical,Leisure
+FOOT-B.ST,Consumer Cyclical,Internet Retail
+FPAR-A.ST,Real Estate,Real Estate—Diversified
+FPAR-D.ST,Real Estate,Real Estate—Diversified
+FPAR-PREF.ST,Real Estate,Real Estate—Diversified
+FPIP.ST,Technology,Software—Application
+G5EN.ST,Communication Services,Electronic Gaming & Multimedia
+GAPW-B.ST,Technology,Communication Equipment
+GARO.ST,Industrials,Specialty Industrial Machinery
+GENO.ST,Healthcare,Biotechnology
+GETI-B.ST,Healthcare,Medical Instruments & Supplies
+GHP.ST,Healthcare,Medical Care Facilities
+GOMX.ST,Technology,Communication Equipment
+GPG-PREF.ST,Real Estate,Real Estate Services
+GPG.ST,Real Estate,Real Estate Services
+GREAT.ST,Technology,Software—Application
+GREEN.ST,Industrials,Specialty Business Services
+GRNG.ST,Basic Materials,Aluminum
+HANDI.ST,Healthcare,Medical Devices
+HEBA-B.ST,Real Estate,Real Estate Services
+HEIM-PREF.ST,Real Estate,Real Estate Services
+HEXA-B.ST,Technology,Scientific & Technical Instruments
+HLDX.ST,Consumer Cyclical,Auto Parts
+HM-B.ST,Consumer Cyclical,Apparel Manufacturing
+HMS.ST,Technology,Communication Equipment
+HNSA.ST,Healthcare,Biotechnology
+HOFI.ST,Financial Services,Mortgage Finance
+HOLM-A.ST,Basic Materials,Paper & Paper Products
+HOLM-B.ST,Basic Materials,Paper & Paper Products
+HPOL-B.ST,Basic Materials,Specialty Chemicals
+HTRO.ST,Technology,Communication Equipment
+HUFV-A.ST,Real Estate,Real Estate—Diversified
+HUM.ST,Healthcare,Medical Care Facilities
+HUSQ-A.ST,Industrials,Tools & Accessories
+HUSQ-B.ST,Industrials,Tools & Accessories
+IAR-B.ST,Technology,Software—Application
+IBT-B.ST,Healthcare,Biotechnology
+ICA.ST,Consumer Defensive,Grocery Stores
+IMMNOV.ST,Healthcare,Diagnostics & Research
+IMMU.ST,Healthcare,Biotechnology
+IMPC.ST,Industrials,Specialty Industrial Machinery
+INDT.ST,Industrials,Industrial Distribution
+INDU-A.ST,Financial Services,Asset Management
+INDU-C.ST,Financial Services,Asset Management
+INSTAL.ST,Industrials,Engineering & Construction
+INTEG-B.ST,Healthcare,Medical Instruments & Supplies
+INTRUM.ST,Financial Services,Credit Services
+INVE-A.ST,Financial Services,Asset Management
+INVE-B.ST,Financial Services,Asset Management
+INWI.ST,Industrials,Building Products & Equipment
+INZILE.ST,Consumer Cyclical,Auto Manufacturers
+IPCO.ST,Energy,Oil & Gas E&P
+IRIS.ST,Industrials,Security & Protection Services
+IRLAB-A.ST,Healthcare,Biotechnology
+ISOFOL.ST,Healthcare,Biotechnology
+ITAB-B.ST,Industrials,Business Equipment & Supplies
+ITECH.ST,Healthcare,Biotechnology
+IVACC.ST,Healthcare,Biotechnology
+IVSO.ST,Technology,Communication Equipment
+JETPAK.ST,Industrials,Integrated Freight & Logistics
+JM.ST,Consumer Cyclical,Residential Construction
+JOMA.ST,Real Estate,Real Estate—Development
+JOSE.ST,Basic Materials,Other Industrial Metals & Mining
+K2A-B.ST,Real Estate,Real Estate Services
+KABE-B.ST,Consumer Cyclical,Leisure
+KAMBI.ST,Consumer Cyclical,Gambling
+KAN.ST,Healthcare,Biotechnology
+KAR.ST,Consumer Cyclical,Personal Services
+KARO.ST,Healthcare,Drug Manufacturers—Specialty & Generic
+KFAST-B.ST,Real Estate,Real Estate Services
+KIND-SDB.ST,Consumer Cyclical,Gambling
+KINV-A.ST,Financial Services,Asset Management
+KINV-B.ST,Financial Services,Asset Management
+KLED.ST,Real Estate,Real Estate—Diversified
+KLOV-A.ST,Real Estate,Real Estate—Diversified
+KLOV-B.ST,Real Estate,Real Estate—Diversified
+KLOV-PREF.ST,Real Estate,Real Estate—Diversified
+KNOW.ST,Technology,Information Technology Services
+KOPY.ST,Basic Materials,Gold
+LAGR-B.ST,Technology,Information Technology Services
+LATO-B.ST,Financial Services,Asset Management
+LEO.ST,Communication Services,Electronic Gaming & Multimedia
+LIAB.ST,Industrials,Building Products & Equipment
+LIFCO-B.ST,Industrials,Conglomerates
+LIME.ST,Technology,Software—Application
+LUC.ST,Basic Materials,Other Precious Metals & Mining
+LUG.ST,Basic Materials,Gold
+LUMI.ST,Basic Materials,Copper
+LUND-B.ST,Financial Services,Asset Management
+LUNE.ST,Energy,Oil & Gas E&P
+LYKO-A.ST,Consumer Defensive,Household & Personal Products
+M8G.ST,Communication Services,Electronic Gaming & Multimedia
+MAG.ST,Real Estate,Real Estate—Diversified
+MAGI.ST,Communication Services,Electronic Gaming & Multimedia
+MAHA-A.ST,Energy,Oil & Gas E&P
+MANG.ST,Financial Services,Capital Markets
+MAXF.ST,Real Estate,Real Estate Services
+MCAP.ST,Financial Services,Asset Management
+MCOV-B.ST,Healthcare,Medical Care Facilities
+MEKO.ST,Industrials,Industrial Distribution
+MINEST.ST,Utilities,Utilities—Renewable
+MIPS.ST,Consumer Cyclical,Leisure
+MMGR-B.ST,Industrials,Industrial Distribution
+MNTC.ST,Healthcare,Medical Devices
+MSAB-B.ST,Technology,Software—Application
+MSON-A.ST,Consumer Defensive,Packaged Foods
+MSON-B.ST,Consumer Defensive,Packaged Foods
+MTG-A.ST,Communication Services,Electronic Gaming & Multimedia
+MTG-B.ST,Communication Services,Electronic Gaming & Multimedia
+MTRS.ST,Industrials,Pollution & Treatment Controls
+MYCR.ST,Technology,Electronic Components
+NANOFS.ST,Healthcare,Biotechnology
+NCAB.ST,Technology,Electronic Components
+NCC-A.ST,Industrials,Engineering & Construction
+NCC-B.ST,Industrials,Engineering & Construction
+NDA-SE.ST,Financial Services,Banks—Regional
+NENT-A.ST,Communication Services,Entertainment
+NENT-B.ST,Communication Services,Entertainment
+NEWA-B.ST,Consumer Cyclical,Specialty Retail
+NEXAM.ST,Basic Materials,Specialty Chemicals
+NIBE-B.ST,Industrials,Building Products & Equipment
+NLAB.ST,Consumer Cyclical,Gambling
+NMAN.ST,Industrials,Specialty Industrial Machinery
+NOBI.ST,Consumer Cyclical,"Furnishings, Fixtures & Appliances"
+NOBINA.ST,Industrials,Railroads
+NOKIA-SEK.ST,Technology,Communication Equipment
+NOLA-B.ST,Industrials,Conglomerates
+NOTE.ST,Technology,Electronic Components
+NP3-PREF.ST,Real Estate,Real Estate Services
+NP3.ST,Real Estate,Real Estate Services
+NPAPER.ST,Basic Materials,Paper & Paper Products
+NWG.ST,Industrials,Building Products & Equipment
+NYF.ST,Real Estate,Real Estate Services
+OASM.ST,Healthcare,Drug Manufacturers—Specialty & Generic
+ODD.ST,Consumer Cyclical,Apparel Manufacturing
+OEM-B.ST,Industrials,Specialty Industrial Machinery
+OFFHUS.ST,Real Estate,Real Estate Services
+ONCO.ST,Healthcare,Biotechnology
+ORES.ST,Financial Services,Asset Management
+ORGC.ST,Basic Materials,Specialty Chemicals
+ORX.ST,Healthcare,Drug Manufacturers—Specialty & Generic
+OVZON.ST,Communication Services,Telecom Services
+PACT.ST,Technology,Information Technology Services
+PCELL.ST,Industrials,Electrical Equipment & Parts
+PDX.ST,Communication Services,Electronic Gaming & Multimedia
+PEAB-B.ST,Industrials,Engineering & Construction
+PEGRO-PREF.ST,Financial Services,Asset Management
+PFE.ST,Healthcare,Drug Manufacturers—General
+PLAZ-B.ST,Real Estate,Real Estate Services
+PNDX-B.ST,Consumer Cyclical,Lodging
+POLYG.ST,Basic Materials,Specialty Chemicals
+PRIC-B.ST,Industrials,Business Equipment & Supplies
+PROB.ST,Healthcare,Drug Manufacturers—Specialty & Generic
+PROF-B.ST,Industrials,Metal Fabrication
+QLINEA.ST,Healthcare,Medical Instruments & Supplies
+RATO-A.ST,Financial Services,Asset Management
+RATO-B.ST,Financial Services,Asset Management
+RAY-B.ST,Healthcare,Health Information Services
+READ.ST,Communication Services,Internet Content & Information
+RECI-B.ST,Healthcare,Biotechnology
+REJL-B.ST,Industrials,Consulting Services
+RESURS.ST,Financial Services,Credit Services
+RROS.ST,Basic Materials,Paper & Paper Products
+SAAB-B.ST,Industrials,Aerospace & Defense
+SAGA-A.ST,Real Estate,Real Estate Services
+SAGA-B.ST,Real Estate,Real Estate Services
+SAGA-D.ST,Real Estate,Real Estate Services
+SAGA-PREF.ST,Real Estate,Real Estate Services
+SAND.ST,Industrials,Specialty Industrial Machinery
+SANION.ST,Healthcare,Biotechnology
+SAS.ST,Industrials,Airports & Air Services
+SBB-B.ST,Real Estate,Real Estate Services
+SBB-D.ST,Real Estate,Real Estate Services
+SBB-PREF.ST,Real Estate,Real Estate Services
+SCA-A.ST,Basic Materials,Lumber & Wood Production
+SCA-B.ST,Basic Materials,Lumber & Wood Production
+SCOUT.ST,Communication Services,Electronic Gaming & Multimedia
+SCST.ST,Consumer Defensive,Packaged Foods
+SDIP-B.ST,Industrials,Infrastructure Operations
+SDIP-PREF.ST,Industrials,Infrastructure Operations
+SEB-A.ST,Financial Services,Banks—Regional
+SEB-C.ST,Financial Services,Banks—Regional
+SECARE.ST,Healthcare,Drug Manufacturers—Specialty & Generic
+SECT-B.ST,Healthcare,Medical Devices
+SECU-B.ST,Industrials,Security & Protection Services
+SEDANA.ST,Healthcare,Medical Instruments & Supplies
+SEMC.ST,Industrials,Engineering & Construction
+SENS.ST,Industrials,Security & Protection Services
+SES.ST,Industrials,Waste Management
+SEYE.ST,Technology,Software—Application
+SEZI.ST,Healthcare,Medical Devices
+SF.ST,Communication Services,Electronic Gaming & Multimedia
+SHB-A.ST,Financial Services,Banks—Diversified
+SHB-B.ST,Financial Services,Banks—Diversified
+SHOT.ST,Consumer Cyclical,Lodging
+SINCH.ST,Communication Services,Telecom Services
+SINT.ST,Industrials,Specialty Industrial Machinery
+SIVE.ST,Technology,Semiconductors
+SKA-B.ST,Industrials,Engineering & Construction
+SKF-A.ST,Industrials,Tools & Accessories
+SKF-B.ST,Industrials,Tools & Accessories
+SKIS-B.ST,Consumer Cyclical,Resorts & Casinos
+SOBI.ST,Healthcare,Drug Manufacturers—Specialty & Generic
+SOF-B.ST,Technology,Information Technology Services
+SOLT.ST,Technology,Solar
+SPEC.ST,Healthcare,Medical Devices
+SPEONE.ST,Technology,Software—Application
+SRNKE-B.ST,Industrials,Engineering & Construction
+SSAB-A.ST,Basic Materials,Steel
+SSAB-B.ST,Basic Materials,Steel
+STAR-A.ST,Communication Services,Electronic Gaming & Multimedia
+STAR-B.ST,Communication Services,Electronic Gaming & Multimedia
+STE-A.ST,Basic Materials,Paper & Paper Products
+STE-R.ST,Basic Materials,Paper & Paper Products
+STEF-B.ST,Real Estate,Real Estate—Diversified
+STORY-B.ST,Communication Services,Publishing
+STRLNG.ST,Industrials,Specialty Industrial Machinery
+SUS.ST,Healthcare,Health Information Services
+SVED-B.ST,Industrials,Building Products & Equipment
+SVIK.ST,Industrials,Waste Management
+SVOL-A.ST,Financial Services,Asset Management
+SVOL-B.ST,Financial Services,Asset Management
+SWEC-A.ST,Industrials,Engineering & Construction
+SWEC-B.ST,Industrials,Engineering & Construction
+SWED-A.ST,Financial Services,Banks—Regional
+SWMA.ST,Consumer Defensive,Tobacco
+SYSR.ST,Industrials,Building Products & Equipment
+TEL2-A.ST,Communication Services,Telecom Services
+TEL2-B.ST,Communication Services,Telecom Services
+TELIA.ST,Communication Services,Telecom Services
+TEQ.ST,Industrials,Industrial Distribution
+TETY.ST,Energy,Oil & Gas E&P
+TFBANK.ST,Financial Services,Banks—Regional
+THULE.ST,Consumer Cyclical,Leisure
+TIETOS.ST,Technology,Information Technology Services
+TIGO-SDB.ST,Communication Services,Telecom Services
+TOBII.ST,Technology,Computer Hardware
+TORSAB.ST,Real Estate,Real Estate Services
+TRAC-B.ST,Financial Services,Asset Management
+TRAIN-B.ST,Industrials,Infrastructure Operations
+TREL-B.ST,Industrials,Specialty Industrial Machinery
+TRIAN-B.ST,Real Estate,Real Estate—Diversified
+TROAX.ST,Industrials,Specialty Industrial Machinery
+UPSALE.ST,Technology,Software—Application
+VBG-B.ST,Consumer Cyclical,Auto Parts
+VICO.ST,Healthcare,Biotechnology
+VIT-B.ST,Technology,Software—Application
+VITR.ST,Healthcare,Medical Devices
+VNE-SDB.ST,Consumer Cyclical,Auto Parts
+VNV.ST,Financial Services,Asset Management
+VOLO-PREF.ST,Industrials,Conglomerates
+VOLO.ST,Industrials,Conglomerates
+VOLV-A.ST,Industrials,Farm & Heavy Construction Machinery
+VOLV-B.ST,Industrials,Farm & Heavy Construction Machinery
+WALL-B.ST,Real Estate,Real Estate—Development
+WBGR-B.ST,Industrials,Engineering & Construction
+WIHL.ST,Real Estate,Real Estate Services
+XANO-B.ST,Industrials,Specialty Industrial Machinery
+XBRANE.ST,Healthcare,Biotechnology
+XSPRAY.ST,Healthcare,Biotechnology
+XVIVO.ST,Healthcare,Medical Devices
+ZZ-B.ST,Consumer Defensive,Household & Personal Products
