@@ -5,112 +5,12 @@ import datetime as dt
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import csv
 import os.path
-import pandas as pd
 
-import yfinance as yf
+from download import download
+
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
-
-def load_data(tickers: list):
-    """
-    Load relevant information from provided tickers.
-
-    Parameters
-    ----------
-    tickers: list
-    Stock symbols
-
-    Returns
-    -------
-    Dictionary including:
-    - tickers: list of symbols with available information;
-    - dates: dates corresponding to available prices;
-    - sectors: list of sectors at stock-level;
-    - industries: list of industries at stock-level;
-    - logp: log-prices at stock-level;
-    - volume: volume of transitions at stock-level.
-    """
-    # make tickers unique
-    tickers = list(set(tickers))
-    # download all last year available adjusted closing prices and volumes
-    dfp = yf.download(tickers, period="1y")[["Adj Close", "Volume"]]
-    dfp, dfv = dfp["Adj Close"], dfp["Volume"]
-    # fix inconsistency if only one stock is loaded
-    if dfp.ndim == 1:
-        dfp = pd.DataFrame(dfp).rename(columns={"Adj Close": tickers[0]})
-        dfv = pd.DataFrame(dfv).rename(columns={"Volume": tickers[0]})
-    # drop stocks that have NaNs in at least half for the entries
-    rm_idx = np.union1d(np.where((dfp.isnull().sum(0) > 0.33 * dfp.shape[0]) == True)[0],
-                        np.where((dfv.isnull().sum(0) > 0.33 * dfp.shape[0]) == True)[0])
-    dfp.drop(columns=dfp.columns[rm_idx], inplace=True)
-    dfv.drop(columns=dfv.columns[rm_idx], inplace=True)
-    # raise exception if no stock is left
-    if dfp.size == 0:
-        raise Exception("No symbol with full information is available.")
-    # propagate data backwards to fill NaNs, then forward, then drop possible duplicated dates
-    dfp = dfp.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
-    dfv = dfv.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
-    # print out unavailable symbols
-    missing_tickers = [tick for tick in tickers if tick not in dfp.columns]
-    if len(missing_tickers) > 0:
-        print('\nRemoving {} from list of symbols because yfinance could not provide full information.'.format(missing_tickers))
-    # reset list of tickers and stocks
-    tickers = list(dfp.columns)
-    stocks = [yf.Tickers(tickers[i*254:(i+1)*254]).tickers for i in range(int(np.ceil(len(tickers) / 254)))]
-    # store log-prices and volumes
-    logp = np.log(dfp.to_numpy().T)
-    volume = dfv.to_numpy().T
-
-    filename = "stock_info.csv"
-    print('\nAccessing stock information. For all symbols that you download for the first time, this can take a '
-    'while. Otherwise, stock information is cached into ' + filename + ' and accessing it will be fast.')
-
-    if not os.path.exists(filename):
-        # create a .csv to store stock information
-        with open(filename, 'w') as file:
-            wr = csv.writer(file)
-            for row in zip(["SYMBOL"], ["SECTOR"], ["INDUSTRY"]):
-                wr.writerow(row)
-    # load stock information file
-    stock_info = pd.read_csv(filename)
-
-    # load sector and industry information. If any is already available in the stock information file, load it from
-    # there. Otherwise, try out if it is available in the data. If not, give it a unique name.
-    sectors = []
-    industries = []
-    missing_sector = {}
-    missing_industry = {}
-    for i in range(len(tickers)):
-        idx = np.where(stock_info["SYMBOL"].values == tickers[i])[0]
-        if len(idx) > 0:
-            sectors.append(stock_info["SECTOR"][idx[0]])
-            industries.append(stock_info["INDUSTRY"][idx[0]])
-        else:
-            try:
-                info = stocks[i // 254][i % 254].info
-                if ((type(info["sector"]) == float) and np.isnan(info["sector"])) |\
-                        ((type(info["industry"]) == float) and np.isnan(info["industry"])) |\
-                        ((type(info["sector"]) == str) and (len(info["sector"]) == 0)) |\
-                        ((type(info["industry"]) == str) and (len(info["industry"]) == 0)):
-                    raise Exception
-                sectors.append(info["sector"])
-                missing_sector[tickers[i]] = sectors[-1]
-                industries.append(info["industry"])
-                missing_industry[tickers[i]] = industries[-1]
-            except:
-                sectors.append("NA_sector" + str(i))
-                industries.append("NA_industry" + str(i))
-
-    # cache information that was not present before, except for names that were given artificially.
-    stock_info = zip(list(missing_sector.keys()), list(missing_sector.values()), list(missing_industry.values()))
-    with open(filename, 'a+', newline='') as file:
-        wr = csv.writer(file)
-        for row in stock_info:
-            wr.writerow(row)
-
-    return dict(tickers=tickers, stock_dates=pd.to_datetime(dfp.index).date, volume_dates=pd.to_datetime(dfv.index).date,
-                sectors=sectors, industries=industries, logp=logp, volume=volume)
 
 def define_model(info: dict, level: str = "stock"):
     """
@@ -309,7 +209,7 @@ if __name__ == '__main__':
     if args.symbols is None:
         with open("symbols_list.txt", "r") as my_file:
             args.symbols = my_file.readlines()[0].split(" ")
-    data = load_data(args.symbols)
+    data = download(args.symbols)
     tickers = data["tickers"]
     num_stocks, t = data['logp'].shape
 
@@ -422,8 +322,6 @@ if __name__ == '__main__':
         industries_id = [np.where(uindustries == industry)[0][0] for industry in data['industries']]
         # ranked volume at stock level
         ranked_volume = data["volume"][rank]
-        # number of volume dates
-        vt = len(data["volume_dates"])
 
         print('\nPlotting market estimation...')
         fig = plt.figure(figsize=(10,3))
@@ -431,12 +329,12 @@ if __name__ == '__main__':
         right_mkt_est = p_mkt_est + 2 * std_p_mkt_est
 
         plt.title("Market", fontsize=15)
-        l1 = plt.plot(data["stock_dates"], np.exp(data['logp'].mean(0)), label="avg. price", color="C0")
-        l2 = plt.plot(data["stock_dates"], p_mkt_est[0], label="trend", color="C1")
-        l3 = plt.fill_between(data["stock_dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 2 st. dev.", color="C0")
+        l1 = plt.plot(data["dates"], np.exp(data['logp'].mean(0)), label="avg. price", color="C0")
+        l2 = plt.plot(data["dates"], p_mkt_est[0], label="trend", color="C1")
+        l3 = plt.fill_between(data["dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 2 st. dev.", color="C0")
         plt.ylabel("avg. price", fontsize=12)
         plt.twinx()
-        l4 = plt.bar(data["volume_dates"], ranked_volume.mean(0), width=1, color='g', alpha=0.2, label='avg. volume')
+        l4 = plt.bar(data["dates"], ranked_volume.mean(0), width=1, color='g', alpha=0.2, label='avg. volume')
         plt.ylabel("avg. volume", fontsize=12)
         ll = l1 + l2 + [l3] + [l4]
         labels = [l.get_label() for l in ll]
@@ -457,13 +355,13 @@ if __name__ == '__main__':
                 plt.subplot(int(np.ceil((num_sectors - num_NA_sectors) / num_columns)), num_columns, j)
                 plt.title(usectors[i], fontsize=15)
                 idx_sectors = np.where(np.array(sectors_id) == i)[0]
-                l1 = plt.plot(data["stock_dates"], np.exp(data['logp'][idx_sectors].reshape(-1, t).mean(0)), label="avg. price", color="C0")
-                l2 = plt.plot(data["stock_dates"], p_sec_est[i], label="trend", color="C1")
-                l3 = plt.fill_between(data["stock_dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
+                l1 = plt.plot(data["dates"], np.exp(data['logp'][idx_sectors].reshape(-1, t).mean(0)), label="avg. price", color="C0")
+                l2 = plt.plot(data["dates"], p_sec_est[i], label="trend", color="C1")
+                l3 = plt.fill_between(data["dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
                 plt.ylabel("avg. price", fontsize=12)
                 plt.xticks(rotation=45)
                 plt.twinx()
-                l4 = plt.bar(data["volume_dates"], data['volume'][np.where(np.array(sectors_id) == i)[0]].reshape(-1, vt).mean(0),
+                l4 = plt.bar(data["dates"], data['volume'][np.where(np.array(sectors_id) == i)[0]].reshape(-1, t).mean(0),
                              width=1, color='g', alpha=0.2, label='avg. volume')
                 plt.ylabel("avg. volume", fontsize=12)
                 ll = l1 + l2 + [l3] + [l4]
@@ -487,13 +385,13 @@ if __name__ == '__main__':
                 plt.title(uindustries[i], fontsize=15)
                 idx_industries = np.where(np.array(industries_id) == i)[0]
                 plt.title(uindustries[i], fontsize=15)
-                l1 = plt.plot(data["stock_dates"], np.exp(data['logp'][idx_industries].reshape(-1, t).mean(0)), label="avg. price", color="C0")
-                l2 = plt.plot(data["stock_dates"], p_ind_est[i], label="trend", color="C1")
-                l3 = plt.fill_between(data["stock_dates"], left_ind_est[i], right_ind_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
+                l1 = plt.plot(data["dates"], np.exp(data['logp'][idx_industries].reshape(-1, t).mean(0)), label="avg. price", color="C0")
+                l2 = plt.plot(data["dates"], p_ind_est[i], label="trend", color="C1")
+                l3 = plt.fill_between(data["dates"], left_ind_est[i], right_ind_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
                 plt.ylabel("avg. price", fontsize=12)
                 plt.xticks(rotation=45)
                 plt.twinx()
-                l4 = plt.bar(data["volume_dates"], data['volume'][np.where(np.array(industries_id) == i)[0]].reshape(-1, vt).mean(0),
+                l4 = plt.bar(data["dates"], data['volume'][np.where(np.array(industries_id) == i)[0]].reshape(-1, t).mean(0),
                              width=1, color='g', alpha=0.2, label='avg. volume')
                 plt.ylabel("avg. volume", fontsize=12)
                 ll = l1 + l2 + [l3] + [l4]
@@ -520,15 +418,15 @@ if __name__ == '__main__':
                     j += 1
                     plt.subplot(int(np.ceil(num_out_trend / num_columns)), num_columns, j)
                     plt.title(ranked_tickers[i], fontsize=15)
-                    l1 = plt.plot(data["stock_dates"], ranked_p[i], label="price")
-                    l2 = plt.plot(data["stock_dates"], ranked_p_est[i], label="trend")
-                    l3 = plt.fill_between(data["stock_dates"], ranked_left_est[i], ranked_right_est[i], alpha=0.2,
+                    l1 = plt.plot(data["dates"], ranked_p[i], label="price")
+                    l2 = plt.plot(data["dates"], ranked_p_est[i], label="trend")
+                    l3 = plt.fill_between(data["dates"], ranked_left_est[i], ranked_right_est[i], alpha=0.2,
                                           label="+/- 2 st. dev.")
                     plt.yticks(fontsize=12)
                     plt.xticks(rotation=45)
                     plt.ylabel("price", fontsize=12)
                     plt.twinx()
-                    l4 = plt.bar(data["volume_dates"], ranked_volume[i], width=1, color='g', alpha=0.2, label='volume')
+                    l4 = plt.bar(data["dates"], ranked_volume[i], width=1, color='g', alpha=0.2, label='volume')
                     plt.ylabel("volume", fontsize=12)
                     ll = l1 + l2 + [l3] + [l4]
                     labels = [l.get_label() for l in ll]

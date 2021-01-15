@@ -30,10 +30,10 @@ When the run is complete, a prediction table like the following will appear prin
 
 For each symbol, the table tells you its sector and industry, then the last available price and finally a rating. Possible ratings are HIGHLY ABOVE TREND, ABOVE TREND, ALONG TREND, BELOW TREND and HIGHLY BELOW TREND. Symbols appear in the table ranked from the furthest below to the furthest above their respective trends. Ranking and rating are derived from a score metric that compares the predicted price in 5 trading days (usually this corresponds to the price in one week) to the last available observed price, scaling by the standard deviation of the prediction; see the technical part below for more details. The prediction table can be saved in the current directory as `prediction_table.csv` by adding the following flag to the command above: `--save-table`.
 
-In the current directory, several estimation plots will appear. `stock_estimation.png` is a visualisation of stock prices and their estimations over the last year, together with a notion of uncertainty and daily trading volume. Only stocks rated either above or below their trends will be plotted, ranked as in the prediction table. Notice how the estimation crucially attempts to reproduce the trend of a stock but not to learn its noise. The uncertainty, on the other hand, depends on the stock volatility; the smaller the volatility, the more confident we are about our estimates, the more a sudden shift from the trend will be regarded as significant You can use this plot as a sanity check that the estimation procedure agrees with your intuition. Make sure to glance at it before any transaction.
+In the current directory, several estimation plots will appear. `stock_estimation.png` is a visualisation of stock prices and their estimations over the last year, together with a notion of uncertainty and daily trading volume. Only stocks rated either above or below their trends will be plotted, ranked as in the prediction table. Notice how the estimation crucially attempts to reproduce the trend of a stock but not to learn its noise. The uncertainty, on the other hand, depends on the stock volatility; the smaller the volatility, the more confident we are about our estimates, the more a sudden shift from the trend will be regarded as significant. You can use this plot as a sanity check that the estimation procedure agrees with your intuition. Make sure to glance at it before any transaction.
 <img width="1204" alt="Screenshot 2021-01-07 at 23 07 00" src="https://user-images.githubusercontent.com/32386694/103950523-ecec7200-5134-11eb-8fb5-4c651a324c34.png">
 
- `sector_estimation.png` and `industry_estimation.png` are plots that help you to quickly visualise estimated sector and industry performances. A sector estimate can be though as the average behaviour of its belonging industries, which in turn should be regarded as the average behaviour of its belonging stocks. Both sectors and industries are ranked in alphabetical order. 
+ `sector_estimation.png` and `industry_estimation.png` are plots that help you to quickly visualise estimated sector and industry performances. A sector estimate can be thought as the average behaviour of its belonging industries, which in turn should be regarded as the average behaviour of its belonging stocks. Both sectors and industries are ranked in alphabetical order. 
 <img width="1325" alt="Screenshot 2021-01-07 at 23 06 23" src="https://user-images.githubusercontent.com/32386694/103950518-e8c05480-5134-11eb-8d59-1f2c98fb7428.png">
 
 <img width="1061" alt="Screenshot 2021-01-07 at 23 07 30" src="https://user-images.githubusercontent.com/32386694/103950520-eb22ae80-5134-11eb-8c09-011e7b67cda2.png">
@@ -67,11 +67,10 @@ source venv/bin/activate
 ```
 Now that you are in your virtual environment, install the dependencies:
 ```ruby
-pip install tensorflow-cpu tensorflow-probability matplotlib yfinance
+pip install -r requirements.txt
 ```
-As an alternative, you can also use the requirements file; type `pip install -r requirements.txt`. 
 
-**Important**: Tensorflow is currently supported only up to Python 3.8, not yet Python 3.9 (see [here](https://www.tensorflow.org/install/pip)); make sure to activate the virtual environment with the right Python version.
+**Important**: Volatile depends on Tensorflow, which is currently supported only up to Python 3.8, not yet Python 3.9 (see [here](https://www.tensorflow.org/install/pip)); make sure to activate the virtual environment with the right Python version.
 
 Done! You're all set to use Volatile. 
 
