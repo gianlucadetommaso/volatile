@@ -7,6 +7,7 @@ import csv
 import os.path
 
 from download import download
+from tools import convert_currency
 
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -211,7 +212,14 @@ if __name__ == '__main__':
             args.symbols = my_file.readlines()[0].split(" ")
     data = download(args.symbols)
     tickers = data["tickers"]
-    num_stocks, t = data['logp'].shape
+    logp = np.log(data['price'])
+
+    # convert currencies to most frequent one
+    for i, curr in enumerate(data['currencies']):
+        if curr != data['default_currency']:
+            logp[i] = convert_currency(logp[i], np.array(data['exchange_rates'][curr]), type='forward')
+
+    num_stocks, t = logp.shape
 
     # find unique names of sectors
     usectors = np.unique(data['sectors'])
@@ -233,7 +241,7 @@ if __name__ == '__main__':
     # how many days to look ahead when comparing the current price against a prediction
     horizon = 5
     # order of the polynomial
-    order = order_selection(data['logp'], info)
+    order = order_selection(logp, info)
 
     print("\nTraining the model...")
 
@@ -243,53 +251,63 @@ if __name__ == '__main__':
     info['order_scale'] = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
 
     # training the model
-    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = training(data['logp'], info, plot_losses=args.plot_losses)
+    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = training(logp, info, plot_losses=args.plot_losses)
+
+    ## log-price statistics (Normal distribution)
     # calculate stock-level estimators of log-prices
     logp_est = np.dot(phi.numpy(), info['tt'])
     std_logp_est = softplus(psi.numpy())
-    # calculate stock-level estimators of prices
-    p_est = np.exp(logp_est + std_logp_est ** 2 / 2)
-    std_p_est = np.sqrt(np.exp(2 * logp_est + std_logp_est ** 2) * (np.exp(std_logp_est ** 2) - 1))
     # calculate stock-level predictions of log-prices
     tt_pred = ((1 + (np.arange(1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
     logp_pred = np.dot(phi.numpy(), tt_pred)
     std_logp_pred = softplus(psi.numpy())
-    # calculate stock-level prediction of prices
-    p_pred = np.exp(logp_pred + std_logp_pred ** 2 / 2)
-    std_p_pred = np.sqrt(np.exp(2 * logp_pred + std_logp_pred ** 2) * (np.exp(std_logp_pred ** 2) - 1))
     # calculate industry-level estimators of log-prices
     logp_ind_est = np.dot(phi_i.numpy(), info['tt'])
     std_logp_ind_est = softplus(psi_i.numpy())
-    # calculate industry-level estimators of prices
-    p_ind_est = np.exp(logp_ind_est + std_logp_ind_est ** 2 / 2)
-    std_p_ind_est = np.sqrt(np.exp(2 * logp_ind_est + std_logp_ind_est ** 2) * (np.exp(std_logp_ind_est ** 2) - 1))
     # calculate sector-level estimators of log-prices
     logp_sec_est = np.dot(phi_s.numpy(), info['tt'])
     std_logp_sec_est = softplus(psi_s.numpy())
-    # calculate sector-level estimators of prices
-    p_sec_est = np.exp(logp_sec_est + std_logp_sec_est ** 2 / 2)
-    std_p_sec_est = np.sqrt(np.exp(2 * logp_sec_est + std_logp_sec_est ** 2) * (np.exp(std_logp_sec_est ** 2) - 1))
     # calculate market-level estimators of log-prices
     logp_mkt_est = np.dot(phi_m.numpy(), info['tt'])
     std_logp_mkt_est = softplus(psi_m.numpy())
+
+    print("Training completed.")
+
+    # compute score
+    scores = ((logp_pred[:, horizon] - logp[:, -1]) / std_logp_pred.squeeze())
+
+    # convert log-price currencies back (standard deviations of log-prices stay the same)
+    for i, curr in enumerate(data['currencies']):
+        if curr != data['default_currency']:
+            logp[i] = convert_currency(logp[i], np.array(data['exchange_rates'][curr]), type='backward')
+            logp_est[i] = convert_currency(logp_est[i], np.array(data['exchange_rates'][curr]), type='backward')
+
+    ## price statistics (log-Normal distribution)
+    # calculate stock-level estimators of prices
+    p_est = np.exp(logp_est + std_logp_est ** 2 / 2)
+    std_p_est = np.sqrt(np.exp(2 * logp_est + std_logp_est ** 2) * (np.exp(std_logp_est ** 2) - 1))
+    # calculate stock-level prediction of prices
+    p_pred = np.exp(logp_pred + std_logp_pred ** 2 / 2)
+    std_p_pred = np.sqrt(np.exp(2 * logp_pred + std_logp_pred ** 2) * (np.exp(std_logp_pred ** 2) - 1))
+    # calculate industry-level estimators of prices
+    p_ind_est = np.exp(logp_ind_est + std_logp_ind_est ** 2 / 2)
+    std_p_ind_est = np.sqrt(np.exp(2 * logp_ind_est + std_logp_ind_est ** 2) * (np.exp(std_logp_ind_est ** 2) - 1))
+    # calculate sector-level estimators of prices
+    p_sec_est = np.exp(logp_sec_est + std_logp_sec_est ** 2 / 2)
+    std_p_sec_est = np.sqrt(np.exp(2 * logp_sec_est + std_logp_sec_est ** 2) * (np.exp(std_logp_sec_est ** 2) - 1))
     # calculate market-level estimators of prices
     p_mkt_est = np.exp(logp_mkt_est + std_logp_mkt_est ** 2 / 2)
     std_p_mkt_est = np.sqrt(np.exp(2 * logp_mkt_est + std_logp_mkt_est ** 2) * (np.exp(std_logp_mkt_est ** 2) - 1))
 
-    print("Training completed.")
-
-    # calculate score
-    scores = ((logp_pred[:, horizon] - data["logp"][:, -1]) / std_logp_pred.squeeze())
     # rank according to score
     rank = np.argsort(scores)[::-1]
     ranked_tickers = np.array(tickers)[rank]
     ranked_scores = scores[rank]
-    ranked_p = np.exp(data["logp"])[rank]
+    ranked_p = data['price'][rank]
     ranked_p_est = p_est[rank]
     ranked_std_p_est = std_p_est[rank]
-    ranked_p_pred = p_pred[rank]
-    ranked_std_p_pred = std_p_pred[rank]
-    
+    ranked_currencies = np.array(data['currencies'])[rank]
+
     # stock thresholds
     st = {"HIGHLY BELOW TREND": 3, "BELOW TREND": 2, "ALONG TREND": 0, "ABOVE TREND": -2, "HIGHLY ABOVE TREND": -3}
     # stock information
@@ -320,7 +338,7 @@ if __name__ == '__main__':
         num_NA_industries = len(NA_industries)
         # provide industry IDs at stock-level
         industries_id = [np.where(uindustries == industry)[0][0] for industry in data['industries']]
-        # ranked volume at stock level
+        # ranked volume at stock-level
         ranked_volume = data["volume"][rank]
 
         print('\nPlotting market estimation...')
@@ -329,10 +347,11 @@ if __name__ == '__main__':
         right_mkt_est = p_mkt_est + 2 * std_p_mkt_est
 
         plt.title("Market", fontsize=15)
-        l1 = plt.plot(data["dates"], np.exp(data['logp'].mean(0)), label="avg. price", color="C0")
+        l1 = plt.plot(data["dates"], np.exp(logp.mean(0)),
+                      label="avg. price in {}".format(data['default_currency']), color="C0")
         l2 = plt.plot(data["dates"], p_mkt_est[0], label="trend", color="C1")
         l3 = plt.fill_between(data["dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 2 st. dev.", color="C0")
-        plt.ylabel("avg. price", fontsize=12)
+        plt.ylabel("avg. price in {}".format(data['default_currency']), fontsize=12)
         plt.twinx()
         l4 = plt.bar(data["dates"], ranked_volume.mean(0), width=1, color='g', alpha=0.2, label='avg. volume')
         plt.ylabel("avg. volume", fontsize=12)
@@ -355,10 +374,11 @@ if __name__ == '__main__':
                 plt.subplot(int(np.ceil((num_sectors - num_NA_sectors) / num_columns)), num_columns, j)
                 plt.title(usectors[i], fontsize=15)
                 idx_sectors = np.where(np.array(sectors_id) == i)[0]
-                l1 = plt.plot(data["dates"], np.exp(data['logp'][idx_sectors].reshape(-1, t).mean(0)), label="avg. price", color="C0")
+                l1 = plt.plot(data["dates"], np.exp(logp[idx_sectors].reshape(-1, t).mean(0)),
+                              label="avg. price in {}".format(data['default_currency']), color="C0")
                 l2 = plt.plot(data["dates"], p_sec_est[i], label="trend", color="C1")
                 l3 = plt.fill_between(data["dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
-                plt.ylabel("avg. price", fontsize=12)
+                plt.ylabel("avg. price in {}".format(data['default_currency']), fontsize=12)
                 plt.xticks(rotation=45)
                 plt.twinx()
                 l4 = plt.bar(data["dates"], data['volume'][np.where(np.array(sectors_id) == i)[0]].reshape(-1, t).mean(0),
@@ -385,10 +405,11 @@ if __name__ == '__main__':
                 plt.title(uindustries[i], fontsize=15)
                 idx_industries = np.where(np.array(industries_id) == i)[0]
                 plt.title(uindustries[i], fontsize=15)
-                l1 = plt.plot(data["dates"], np.exp(data['logp'][idx_industries].reshape(-1, t).mean(0)), label="avg. price", color="C0")
+                l1 = plt.plot(data["dates"], np.exp(logp[idx_industries].reshape(-1, t).mean(0)),
+                              label="avg. price in {}".format(data['default_currency']), color="C0")
                 l2 = plt.plot(data["dates"], p_ind_est[i], label="trend", color="C1")
                 l3 = plt.fill_between(data["dates"], left_ind_est[i], right_ind_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
-                plt.ylabel("avg. price", fontsize=12)
+                plt.ylabel("avg. price in {}".format(data['default_currency']), fontsize=12)
                 plt.xticks(rotation=45)
                 plt.twinx()
                 l4 = plt.bar(data["dates"], data['volume'][np.where(np.array(industries_id) == i)[0]].reshape(-1, t).mean(0),
@@ -418,13 +439,13 @@ if __name__ == '__main__':
                     j += 1
                     plt.subplot(int(np.ceil(num_out_trend / num_columns)), num_columns, j)
                     plt.title(ranked_tickers[i], fontsize=15)
-                    l1 = plt.plot(data["dates"], ranked_p[i], label="price")
+                    l1 = plt.plot(data["dates"], ranked_p[i], label="price in {}".format(ranked_currencies[i]))
                     l2 = plt.plot(data["dates"], ranked_p_est[i], label="trend")
                     l3 = plt.fill_between(data["dates"], ranked_left_est[i], ranked_right_est[i], alpha=0.2,
                                           label="+/- 2 st. dev.")
                     plt.yticks(fontsize=12)
                     plt.xticks(rotation=45)
-                    plt.ylabel("price", fontsize=12)
+                    plt.ylabel("price in {}".format(ranked_currencies[i]), fontsize=12)
                     plt.twinx()
                     l4 = plt.bar(data["dates"], ranked_volume[i], width=1, color='g', alpha=0.2, label='volume')
                     plt.ylabel("volume", fontsize=12)
@@ -441,14 +462,17 @@ if __name__ == '__main__':
     print("\nPREDICTION TABLE")
     ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["sectors"])[rank]]
     ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["industries"])[rank]]
+
     num_dashes = 131
     print(num_dashes * "-")
     print("{:<15} {:<26} {:<42} {:<25} {:<15}".format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATING"))
     print(num_dashes * "-")
     for i in range(num_stocks):
-        print("{:<15} {:<26} {:<42} {:<25} {:<15}".format(ranked_tickers[i], ranked_sectors[i],
-                                                                        ranked_industries[i], ranked_p[i, -1],
-                                                                        ranked_rating[i]))
+        print("{:<15} {:<26} {:<42} {:<25} {:<15}".format(ranked_tickers[i],
+                                                          ranked_sectors[i],
+                                                          ranked_industries[i],
+                                                          "{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]),
+                                                          ranked_rating[i]))
         print(num_dashes * "-")
         if i + 1 in si.values():
             print(num_dashes * "-")
@@ -458,7 +482,7 @@ if __name__ == '__main__':
         table = zip(["SYMBOL"] + ranked_tickers.tolist(),
                     ['SECTOR'] + ranked_sectors,
                     ['INDUSTRY'] + ranked_industries,
-                    ["LAST AVAILABLE PRICE"] + ranked_p[:, -1].tolist(),
+                    ["LAST AVAILABLE PRICE"] + ["{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]) for i in range(num_stocks)],
                     ["RATING"] + ranked_rating)
         with open(tab_name, 'w') as file:
             wr = csv.writer(file)

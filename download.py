@@ -5,24 +5,128 @@ import multitasking
 import json
 import csv
 import numpy as np
+from datetime import date
 
 from tools import ProgressBar
 
-def parse_quotes(data):
-    timestamps = data["timestamp"]
-    ohlc = data["indicators"]["quote"][0]
-    closes, volumes = ohlc["close"], ohlc["volume"]
-    try:
-        adjclose = data["indicators"]["adjclose"][0]["adjclose"]
-    except:
-        adjclose = closes
+def download(tickers: list, interval: str = "1d", period: str = "1y"):
+    """
+    Download historical data for tickers in the list.
 
-    quotes = pd.DataFrame({"Adj Close": adjclose, "Volume": volumes})
-    quotes.index = pd.to_datetime(timestamps, unit="s").date
-    quotes.sort_index(inplace=True)
+    Parameters
+    ----------
+    tickers: list
+        Tickers for which to download historical information.
+    interval: str
+        Frequency between data.
+    period: str
+        Data period to download.
 
-    return quotes
+    Returns
+    -------
+    data: dict
+        Dictionary including the following keys:
+        - tickers: list of tickers
+        - logp: array of log-adjusted closing prices, shape=(num stocks, length period);
+        - volume: array of volumes, shape=(num stocks, length period);
+        - sectors: list of stock sectors;
+        - industries: list stock industries.
+    """
+    tickers = tickers if isinstance(tickers, (list, set, tuple)) else tickers.replace(',', ' ').split()
+    tickers = list(set([ticker.upper() for ticker in tickers]))
 
+    data = {}
+    si_columns = ["SYMBOL", "CURRENCY", "SECTOR", "INDUSTRY"]
+    si_filename = "stock_info.csv"
+    if not os.path.exists(si_filename):
+        # create a .csv to store stock information
+        with open(si_filename, 'w') as file:
+            wr = csv.writer(file)
+            wr.writerow(si_columns)
+    # load stock information file
+    si = pd.read_csv(si_filename)
+    missing_tickers = [ticker for ticker in tickers if ticker not in si['SYMBOL'].values]
+    missing_si, na_si = {}, {}
+    currencies = {}
+
+    @multitasking.task
+    def _download_one_threaded(ticker: str, interval: str = "1d", period: str = "1y"):
+        """
+        Download historical data for a single ticker with multithreading. Plus, it scrapes missing stock information.
+
+        Parameters
+        ----------
+        ticker: str
+            Ticker for which to download historical information.
+        interval: str
+            Frequency between data.
+        period: str
+            Data period to download.
+        """
+        data_one = _download_one(ticker, interval, period)
+
+        try:
+            data_one = data_one["chart"]["result"][0]
+            data[ticker] = _parse_quotes(data_one)
+
+            if ticker in missing_tickers:
+                currencies[ticker] = data_one['meta']['currency']
+                try:
+                    html = requests.get(url='https://finance.yahoo.com/quote/' + ticker).text
+                    json_str = html.split('root.App.main =')[1].split('(this)')[0].split(';\n}')[0].strip()
+                    info = json.loads(json_str)['context']['dispatcher']['stores']['QuoteSummaryStore']['summaryProfile']
+                    assert (len(info['sector']) > 0) and (len(info['industry']) > 0)
+                    missing_si[ticker] = dict(sector=info["sector"], industry=info["industry"])
+                except:
+                    pass
+        except:
+            pass
+        progress.animate()
+
+    num_threads = min([len(tickers), multitasking.cpu_count() * 2])
+    multitasking.set_max_threads(num_threads)
+
+    progress = ProgressBar(len(tickers), 'completed')
+
+    for ticker in tickers:
+        _download_one_threaded(ticker, interval, period)
+    multitasking.wait_for_tasks()
+
+    progress.completed()
+
+    if len(data) == 0:
+        raise Exception("No symbol with full information is available.")
+
+    data = pd.concat(data.values(), keys=data.keys(), axis=1, sort=True)
+    data.drop(columns=data.columns[data.isnull().sum(0) > 0.33 * data.shape[0]], inplace=True)
+    data = data.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
+
+    info = zip(list(missing_si.keys()), [currencies[ticker] for ticker in missing_si.keys()],
+                                        [v['sector'] for v in missing_si.values()],
+                                        [v['industry'] for v in missing_si.values()])
+    with open(si_filename, 'a+', newline='') as file:
+        wr = csv.writer(file)
+        for row in info:
+            wr.writerow(row)
+    si = pd.read_csv('stock_info.csv').set_index("SYMBOL").to_dict(orient='index')
+
+    missing_tickers = [ticker for ticker in tickers if ticker not in data.columns.get_level_values(0)[::2].tolist()]
+    tickers = data.columns.get_level_values(0)[::2].tolist()
+    if len(missing_tickers) > 0:
+        print('\nRemoving {} from list of symbols because we could not collect full information.'.format(missing_tickers))
+
+    currencies = [si[ticker]['CURRENCY'] if ticker in si else currencies[ticker] for ticker in tickers]
+    xrates, default_currency = get_exchange_rates(currencies, data.index, interval, period)
+
+    return dict(tickers=tickers,
+                dates=pd.to_datetime(data.index),
+                price=data.iloc[:, data.columns.get_level_values(1) == 'Adj Close'].to_numpy().T,
+                volume=data.iloc[:, data.columns.get_level_values(1) == 'Volume'].to_numpy().T,
+                currencies=currencies,
+                exchange_rates=xrates,
+                default_currency=default_currency,
+                sectors=[si[ticker]['SECTOR'] if ticker in si else "NA_" + ticker for ticker in tickers],
+                industries=[si[ticker]['INDUSTRY'] if ticker in si else "NA_" + ticker for ticker in tickers])
 
 def _download_one(ticker: str, interval: str = "1d", period: str = "1y"):
     """
@@ -55,14 +159,48 @@ def _download_one(ticker: str, interval: str = "1d", period: str = "1y"):
     data = data.json()
     return data
 
-def download(tickers: list, interval: str = "1d", period: str = "1y"):
+def _parse_quotes(data: dict, parse_volume: bool = True):
     """
-    Download historical data for tickers in the list.
+    It creates a data frame of adjusted closing prices, and, if `parse_volume=True`, volumes. If no adjusted closing
+    price is available, it sets it equal to closing price.
 
     Parameters
     ----------
-    tickers: list
-        Tickers for which to download historical information.
+    data: dict
+        Data containing historical information of corresponding stock.
+    parse_volume: bool
+        Include or not volume information in the data frame.
+    """
+    timestamps = data["timestamp"]
+    ohlc = data["indicators"]["quote"][0]
+    closes = ohlc["close"]
+    if parse_volume:
+        volumes = ohlc["volume"]
+    try:
+        adjclose = data["indicators"]["adjclose"][0]["adjclose"]
+    except:
+        adjclose = closes
+
+    quotes = {"Adj Close": adjclose}
+    if parse_volume:
+        quotes["Volume"] = volumes
+    quotes = pd.DataFrame(quotes)
+    quotes.index = pd.to_datetime(timestamps, unit="s").date
+    quotes.sort_index(inplace=True)
+
+    return quotes
+
+def get_exchange_rates(currencies: list, dates: date, interval: str = "1d", period: str = "1y"):
+    """
+    It finds the most common currency and set it as default one. For any other currency, it downloads exchange rate
+    closing prices to the default currency and return them as data frame.
+
+    Parameters
+    ----------
+    currencies: list
+        A list of currencies at stock-level.
+    dates: date
+        Dates for which exchange rates should be available.
     interval: str
         Frequency between data.
     period: str
@@ -70,97 +208,24 @@ def download(tickers: list, interval: str = "1d", period: str = "1y"):
 
     Returns
     -------
-    data: dict
-        Dictionary including the following keys:
-        - tickers: list of tickers
-        - logp: array of log-adjusted closing prices, shape=(num stocks, length period);
-        - volume: array of volumes, shape=(num stocks, length period);
-        - sectors: list of stock sectors;
-        - industries: list stock industries.
+    xrates: dict
+        A dictionary with currencies as keys and list of exchange rates at desired dates as values.
+    default_currency: str
+        Most common currency chosen as default.
     """
-    tickers = tickers if isinstance(tickers, (list, set, tuple)) else tickers.replace(',', ' ').split()
-    tickers = list(set([ticker.upper() for ticker in tickers]))
-
-    data = {}
-    si_columns = ["SYMBOL", "SECTOR", "INDUSTRY"]
-    si_filename = "stock_info.csv"
-    if not os.path.exists(si_filename):
-        # create a .csv to store stock information
-        with open(si_filename, 'w') as file:
-            wr = csv.writer(file)
-            for row in zip([[c] for c in si_columns]):
-                wr.writerow(row)
-    # load stock information file
-    si = pd.read_csv(si_filename)
-    missing_tickers = [ticker for ticker in tickers if ticker not in si['SYMBOL'].values]
-    missing_si, na_si = {}, {}
-
-    @multitasking.task
-    def _download_one_threaded(ticker: str, interval: str = "1d", period: str = "1y"):
-        """
-        Download historical data for a single ticker with multithreading. Plus, it scrapes missing stock information.
-
-        Parameters
-        ----------
-        ticker: str
-            Ticker for which to download historical information.
-        interval: str
-            Frequency between data.
-        period: str
-            Data period to download.
-        """
-        data_one = _download_one(ticker, interval, period)
-
-        try:
-            data[ticker] = parse_quotes(data_one["chart"]["result"][0])
-
-            if ticker in missing_tickers:
-                try:
-                    html = requests.get(url='https://finance.yahoo.com/quote/' + ticker).text
-                    json_str = html.split('root.App.main =')[1].split('(this)')[0].split(';\n}')[0].strip()
-                    info = json.loads(json_str)['context']['dispatcher']['stores']['QuoteSummaryStore']['summaryProfile']
-                    assert (len(info['sector']) > 0) and (len(info['industry']) > 0)
-                    missing_si[ticker] = dict(sector=info["sector"], industry=info["industry"])
-                except:
-                    pass
-        except:
-            pass
-        progress.animate()
-
-    num_threads = min([len(tickers), multitasking.cpu_count() * 2])
-    multitasking.set_max_threads(num_threads)
-
-    progress = ProgressBar(len(tickers), 'completed')
-
-    for ticker in tickers:
-        _download_one_threaded(ticker, interval, period)
-    multitasking.wait_for_tasks()
-
-    progress.completed()
-
-    if len(data) == 0:
-        raise Exception("No symbol with full information is available.")
-
-    data = pd.concat(data.values(), keys=data.keys(), axis=1)
-    data.drop(columns=data.columns[data.isnull().sum(0) > 0.33 * data.shape[0]], inplace=True)
-    data = data.fillna(method='bfill').fillna(method='ffill').drop_duplicates()
-
-    info = zip(list(missing_si.keys()), [v['sector'] for v in missing_si.values()],
-               [v['industry'] for v in missing_si.values()])
-    with open(si_filename, 'a+', newline='') as file:
-        wr = csv.writer(file)
-        for row in info:
-            wr.writerow(row)
-    si = pd.read_csv('stock_info.csv').set_index("SYMBOL").to_dict(orient='index')
-
-    missing_tickers = [ticker for ticker in tickers if ticker not in data.columns.get_level_values(0)[::2].tolist()]
-    tickers = data.columns.get_level_values(0)[::2].tolist()
-    if len(missing_tickers) > 0:
-        print('\nRemoving {} from list of symbols because we could not collect full information.'.format(missing_tickers))
-
-    return dict(tickers=tickers,
-                dates=pd.to_datetime(data.index),
-                logp=np.log(data.iloc[:, data.columns.get_level_values(1) == 'Adj Close'].to_numpy().T),
-                volume=data.iloc[:, data.columns.get_level_values(1) == 'Volume'].to_numpy().T,
-                sectors=[si[ticker]['SECTOR'] if ticker in si else "NA_" + ticker for ticker in tickers],
-                industries=[si[ticker]['INDUSTRY'] if ticker in si else "NA_" + ticker for ticker in tickers])
+    ucurrencies, counts = np.unique(currencies, return_counts=True)
+    default_currency = ucurrencies[np.argmax(counts)]
+    tmp = {}
+    if len(ucurrencies) > 1:
+        for curr in ucurrencies:
+            if curr != default_currency:
+                tmp[curr] = _download_one(curr + default_currency + "=x", interval, period)
+                tmp[curr] = _parse_quotes(tmp[curr]["chart"]["result"][0], parse_volume=False)["Adj Close"]
+        tmp = pd.concat(tmp.values(), keys=tmp.keys(), axis=1, sort=True)
+        xrates = pd.DataFrame(index=dates, columns=tmp.columns)
+        xrates.loc[xrates.index.isin(tmp.index)] = tmp
+        xrates = xrates.fillna(method='bfill').fillna(method='ffill')
+        xrates.to_dict(orient='list')
+    else:
+        xrates = tmp
+    return xrates, default_currency

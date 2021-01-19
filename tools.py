@@ -1,4 +1,29 @@
 import sys
+import numpy as np
+
+def convert_currency(logp: np.array, xrate: np.array, type: str = "forward"):
+    """
+    It converts currency of price in log-form. If `type=forward`, the conversion is from the original log-price currency
+    to the one determined by the exchange rate. Vice versa if `type=backward`.
+
+    Parameters
+    ----------
+    logp: np.array
+        Log-price of a stock.
+    xrate: np.array
+        Exchange rate from stock currency to another one.
+    type: str
+        Conversion type. It can be either `forward` or `backward`.
+
+    Returns
+    -------
+    It returns converted log-price.
+    """
+    if type == "forward":
+        return logp + np.log(xrate)
+    if type == "backward":
+        return logp - np.log(xrate)
+    raise Exception("Conversion type {} not recognised.".format(type))
 
 class ProgressBar:
     """
