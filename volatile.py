@@ -2,18 +2,18 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, SUPPRESS
 import csv
 import os.path
 
 from download import download
-from tools import convert_currency
+from tools import convert_currency, extract_hierarchical_info
 
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
 
-def define_model(info: dict, level: str = "stock"):
+def define_model(info: dict, level: str = "stock") -> tfd.JointDistributionSequentialAutoBatched:
     """
     Define and return graphical model.
 
@@ -63,7 +63,7 @@ def define_model(info: dict, level: str = "stock"):
 
     return tfd.JointDistributionSequentialAutoBatched(m)
 
-def training(logp: np.array, info: dict, learning_rate: float = 0.01, num_steps: int = 20000, plot_losses: bool = False):
+def train(logp: np.array, info: dict, learning_rate: float = 0.01, num_steps: int = 10000, plot_losses: bool = False) -> tuple:
     """
     It performs sequential optimization over the model parameters via Adam optimizer, training at different levels to
     provide sensible initial solutions at finer levels.
@@ -83,7 +83,7 @@ def training(logp: np.array, info: dict, learning_rate: float = 0.01, num_steps:
 
     Returns
     -------
-    It returns trained parameters.
+    It returns a tuple of trained parameters.
     """
     optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
     num_steps_l = int(np.ceil(num_steps // 4))
@@ -136,7 +136,7 @@ def training(logp: np.array, info: dict, learning_rate: float = 0.01, num_steps:
         print('Losses decay plot has been saved in this directory as {}.'.format(fig_name))
     return phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi
 
-def softplus(x: np.array):
+def softplus(x: np.array) -> np.array:
     """
     It is a function from real to positive numbers
 
@@ -147,9 +147,10 @@ def softplus(x: np.array):
     """
     return np.log(1 + np.exp(x))
 
-def order_selection(logp: np.array, info: dict, orders: np.array = np.arange(1, 14), horizon: int = 5):
+def select_order(logp: np.array, info: dict, orders: np.array = np.arange(1, 14), horizon: int = 5) -> int:
     """
-    It is a function from real to positive numbers
+    Select the order of the polynomial minimizing an empirical second moment metrics, using the last week of data as
+    test set.
 
     Parameters
     ----------
@@ -170,8 +171,8 @@ def order_selection(logp: np.array, info: dict, orders: np.array = np.arange(1, 
         info['tt'] = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
         info['order_scale'] = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
 
-        # training the model
-        phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = training(logp[:, :-horizon], info)
+        # train the model
+        phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp[:, :-horizon], info)
 
         # construct loss
         tt_pred = ((1 + (np.arange(1, 1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
@@ -192,10 +193,44 @@ def order_selection(logp: np.array, info: dict, orders: np.array = np.arange(1, 
     print("Model selection completed. Volatile will use a polynomial model of degree {}.".format(min_order))
     return min_order
 
+def rate(scores: np.array, thresholds: dict = None) -> list:
+    """
+    Rate scores according to `thresholds`. Possible rates are `HIGHLY BELOW TREND`, `BELOW TREND`, `ALONG TREND`,
+    `ABOVE TREND` and `HIGHLY ABOVE TREND`.
+
+    Parameters
+    ----------
+    scores: np.array
+        An array of scores for each stock.
+    thresholds: dict
+        It has for keys the possible rates and for values the corresponding thresholds.
+
+    Returns
+    -------
+    rates: list
+        List of rates for each stock.
+    """
+    if thresholds is None:
+        thresholds = {"HIGHLY BELOW TREND": 3, "BELOW TREND": 2, "ALONG TREND": 0, "ABOVE TREND": -2,
+                      "HIGHLY ABOVE TREND": -3}
+    rates = []
+    for i in range(len(scores)):
+        if scores[i] > thresholds["HIGHLY BELOW TREND"]:
+            rates.append("HIGHLY BELOW TREND")
+        elif scores[i] > thresholds["BELOW TREND"]:
+            rates.append("BELOW TREND")
+        elif scores[i] > thresholds["ALONG TREND"]:
+            rates.append("ALONG TREND")
+        elif scores[i] > thresholds["ABOVE TREND"]:
+            rates.append("ABOVE TREND")
+        else:
+            rates.append("HIGHLY ABOVE TREND")
+    return rates
+
 if __name__ == '__main__':
     cli = ArgumentParser('Volatile: your day-to-day trading companion.',
                          formatter_class=ArgumentDefaultsHelpFormatter)
-    cli.add_argument('-s', '--symbols', type=str, nargs='+', help='List of symbols.')
+    cli.add_argument('-s', '--symbols', type=str, nargs='+', help=SUPPRESS)
     cli.add_argument('--save-table', action='store_true',
                      help='Save prediction table in csv format.')
     cli.add_argument('--no-plots', action='store_true',
@@ -221,27 +256,12 @@ if __name__ == '__main__':
 
     num_stocks, t = logp.shape
 
-    # find unique names of sectors
-    usectors = np.unique(data['sectors'])
-    num_sectors = len(usectors)
-    # provide sector IDs at stock-level
-    sectors_id = [np.where(usectors == sector)[0][0] for sector in data['sectors']]
-    # find unique names of industries and store indices
-    uindustries, industries_idx = np.unique(data['industries'], return_index=True)
-    num_industries = len(uindustries)
-    # provide industry IDs at stock-level
-    industries_id = [np.where(uindustries == industry)[0][0] for industry in data['industries']]
-    # provide sector IDs at industry-level
-    sector_industries_id = np.array(sectors_id)[industries_idx].tolist()
-
-    # place relevant information in dictionary
-    info = dict(num_sectors=num_sectors, num_industries=num_industries, sector_industries_id=sector_industries_id,
-                industries_id=industries_id, sectors_id=sectors_id)
+    info = extract_hierarchical_info(data['sectors'], data['industries'])
 
     # how many days to look ahead when comparing the current price against a prediction
     horizon = 5
     # order of the polynomial
-    order = order_selection(logp, info)
+    order = select_order(logp, info)
 
     print("\nTraining the model...")
 
@@ -250,8 +270,8 @@ if __name__ == '__main__':
     # reweighing factors for parameters corresponding to different orders of the polynomial
     info['order_scale'] = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
 
-    # training the model
-    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = training(logp, info, plot_losses=args.plot_losses)
+    # train the model
+    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp, info, plot_losses=args.plot_losses)
 
     ## log-price statistics (Normal distribution)
     # calculate stock-level estimators of log-prices
@@ -274,7 +294,7 @@ if __name__ == '__main__':
     print("Training completed.")
 
     # compute score
-    scores = ((logp_pred[:, horizon] - logp[:, -1]) / std_logp_pred.squeeze())
+    scores = (logp_pred[:, horizon] - logp[:, -1]) / std_logp_pred.squeeze()
 
     # convert log-price currencies back (standard deviations of log-prices stay the same)
     for i, curr in enumerate(data['currencies']):
@@ -308,17 +328,8 @@ if __name__ == '__main__':
     ranked_std_p_est = std_p_est[rank]
     ranked_currencies = np.array(data['currencies'])[rank]
 
-    # stock thresholds
-    st = {"HIGHLY BELOW TREND": 3, "BELOW TREND": 2, "ALONG TREND": 0, "ABOVE TREND": -2, "HIGHLY ABOVE TREND": -3}
-    # stock information
-    si = {"HIGHLY BELOW TREND": np.where(ranked_scores > st["HIGHLY BELOW TREND"])[0],
-              "BELOW TREND": np.where((ranked_scores <= st["HIGHLY BELOW TREND"]) & (ranked_scores > st["BELOW TREND"]))[0],
-              "ALONG TREND": np.where((ranked_scores <= st["BELOW TREND"]) & (ranked_scores > st["ABOVE TREND"]))[0],
-              "ABOVE TREND": np.where((ranked_scores <= st["ABOVE TREND"]) & (ranked_scores > st["HIGHLY ABOVE TREND"]))[0],
-              "HIGHLY ABOVE TREND": np.where(ranked_scores <= st["HIGHLY ABOVE TREND"])[0]}
-    si = {k: v[0] for k, v in si.items() if len(v) > 0}
-    # rate all stocks
-    ranked_rating = np.array(list(si.keys())).repeat(list(np.diff(list(si.values()))) + [num_stocks - list(si.values())[-1]]).tolist()
+    # rate stockes
+    ranked_rates = rate(ranked_scores)
 
     if not args.no_plots:
         ## information for plotting
@@ -424,7 +435,7 @@ if __name__ == '__main__':
         print('Industry estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
 
         # determine which stocks are along trend to avoid plotting them
-        along_trend = np.where(np.array(ranked_rating) == "ALONG TREND")[0]
+        along_trend = np.where(np.array(ranked_rates) == "ALONG TREND")[0]
         num_out_trend = num_stocks - len(along_trend)
 
         if num_out_trend > 0:
@@ -463,19 +474,18 @@ if __name__ == '__main__':
     ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["sectors"])[rank]]
     ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["industries"])[rank]]
 
+    strf = "{:<15} {:<26} {:<42} {:<25} {:<15}"
     num_dashes = 131
+    separator = num_dashes * "-"
     print(num_dashes * "-")
-    print("{:<15} {:<26} {:<42} {:<25} {:<15}".format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATING"))
-    print(num_dashes * "-")
+    print(strf.format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATING"))
+    print(separator)
     for i in range(num_stocks):
-        print("{:<15} {:<26} {:<42} {:<25} {:<15}".format(ranked_tickers[i],
-                                                          ranked_sectors[i],
-                                                          ranked_industries[i],
-                                                          "{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]),
-                                                          ranked_rating[i]))
-        print(num_dashes * "-")
-        if i + 1 in si.values():
-            print(num_dashes * "-")
+        print(strf.format(ranked_tickers[i], ranked_sectors[i], ranked_industries[i],
+                          "{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]), ranked_rates[i]))
+        print(separator)
+        if i < num_stocks - 1 and ranked_rates[i] != ranked_rates[i + 1]:
+            print(separator)
 
     if args.save_table:
         tab_name = 'prediction_table.csv'
@@ -483,7 +493,7 @@ if __name__ == '__main__':
                     ['SECTOR'] + ranked_sectors,
                     ['INDUSTRY'] + ranked_industries,
                     ["LAST AVAILABLE PRICE"] + ["{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]) for i in range(num_stocks)],
-                    ["RATING"] + ranked_rating)
+                    ["RATING"] + ranked_rates)
         with open(tab_name, 'w') as file:
             wr = csv.writer(file)
             for row in table:

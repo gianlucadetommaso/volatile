@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import os.path
 import pandas as pd
 import requests
@@ -5,11 +6,10 @@ import multitasking
 import json
 import csv
 import numpy as np
-from datetime import date
 
 from tools import ProgressBar
 
-def download(tickers: list, interval: str = "1d", period: str = "1y"):
+def download(tickers: list, interval: str = "1d", period: str = "1y") -> dict:
     """
     Download historical data for tickers in the list.
 
@@ -115,8 +115,11 @@ def download(tickers: list, interval: str = "1d", period: str = "1y"):
     if len(missing_tickers) > 0:
         print('\nRemoving {} from list of symbols because we could not collect full information.'.format(missing_tickers))
 
+    # download exchange rates and convert to most common currency
     currencies = [si[ticker]['CURRENCY'] if ticker in si else currencies[ticker] for ticker in tickers]
-    xrates, default_currency = get_exchange_rates(currencies, data.index, interval, period)
+    ucurrencies, counts = np.unique(currencies, return_counts=True)
+    default_currency = ucurrencies[np.argmax(counts)]
+    xrates = get_exchange_rates(currencies, default_currency, data.index, interval, period)
 
     return dict(tickers=tickers,
                 dates=pd.to_datetime(data.index),
@@ -128,7 +131,7 @@ def download(tickers: list, interval: str = "1d", period: str = "1y"):
                 sectors=[si[ticker]['SECTOR'] if ticker in si else "NA_" + ticker for ticker in tickers],
                 industries=[si[ticker]['INDUSTRY'] if ticker in si else "NA_" + ticker for ticker in tickers])
 
-def _download_one(ticker: str, interval: str = "1d", period: str = "1y"):
+def _download_one(ticker: str, interval: str = "1d", period: str = "1y") -> dict:
     """
     Download historical data for a single ticker.
 
@@ -159,7 +162,7 @@ def _download_one(ticker: str, interval: str = "1d", period: str = "1y"):
     data = data.json()
     return data
 
-def _parse_quotes(data: dict, parse_volume: bool = True):
+def _parse_quotes(data: dict, parse_volume: bool = True) -> pd.DataFrame:
     """
     It creates a data frame of adjusted closing prices, and, if `parse_volume=True`, volumes. If no adjusted closing
     price is available, it sets it equal to closing price.
@@ -190,15 +193,17 @@ def _parse_quotes(data: dict, parse_volume: bool = True):
 
     return quotes
 
-def get_exchange_rates(currencies: list, dates: date, interval: str = "1d", period: str = "1y"):
+def get_exchange_rates(from_currencies: list, to_currency: str, dates: pd.Index, interval: str = "1d", period: str = "1y") -> dict:
     """
     It finds the most common currency and set it as default one. For any other currency, it downloads exchange rate
     closing prices to the default currency and return them as data frame.
 
     Parameters
     ----------
-    currencies: list
-        A list of currencies at stock-level.
+    from_currencies: list
+        A list of currencies to convert.
+    to_currency: str
+        Currency to convert to.
     dates: date
         Dates for which exchange rates should be available.
     interval: str
@@ -210,16 +215,13 @@ def get_exchange_rates(currencies: list, dates: date, interval: str = "1d", peri
     -------
     xrates: dict
         A dictionary with currencies as keys and list of exchange rates at desired dates as values.
-    default_currency: str
-        Most common currency chosen as default.
     """
-    ucurrencies, counts = np.unique(currencies, return_counts=True)
-    default_currency = ucurrencies[np.argmax(counts)]
+    ucurrencies, counts = np.unique(from_currencies, return_counts=True)
     tmp = {}
-    if len(ucurrencies) > 1:
+    if to_currency not in ucurrencies or len(ucurrencies) > 1:
         for curr in ucurrencies:
-            if curr != default_currency:
-                tmp[curr] = _download_one(curr + default_currency + "=x", interval, period)
+            if curr != to_currency:
+                tmp[curr] = _download_one(curr + to_currency + "=x", interval, period)
                 tmp[curr] = _parse_quotes(tmp[curr]["chart"]["result"][0], parse_volume=False)["Adj Close"]
         tmp = pd.concat(tmp.values(), keys=tmp.keys(), axis=1, sort=True)
         xrates = pd.DataFrame(index=dates, columns=tmp.columns)
@@ -228,4 +230,4 @@ def get_exchange_rates(currencies: list, dates: date, interval: str = "1d", peri
         xrates.to_dict(orient='list')
     else:
         xrates = tmp
-    return xrates, default_currency
+    return xrates

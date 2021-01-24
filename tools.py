@@ -1,7 +1,8 @@
+#!/usr/bin/env python
 import sys
 import numpy as np
 
-def convert_currency(logp: np.array, xrate: np.array, type: str = "forward"):
+def convert_currency(logp: np.array, xrate: np.array, type: str = "forward") -> np.array:
     """
     It converts currency of price in log-form. If `type=forward`, the conversion is from the original log-price currency
     to the one determined by the exchange rate. Vice versa if `type=backward`.
@@ -76,3 +77,40 @@ class ProgressBar:
 
     def __str__(self):
         return str(self.prog_bar)
+
+def extract_hierarchical_info(sectors: list, industries: list) -> dict:
+    """
+    Extract information about sectors and industries useful to construct the probabilistic model.
+
+    Parameters
+    ----------
+    sectors: list
+        List of sectors at stock-level.
+    industries: list
+        List of industries at stock-level.
+
+    Returns
+    -------
+    It returns a dictionary including the following keys:
+    - num_sectors: number of unique sectors;
+    - num_industries: number of unique industries;
+    - sectors_id: a list of indices at stock-level, corresponding to the sector they belong to;
+    - industries_id: a list of indices at stock-level, corresponding to the industries they belong to;
+    - sector_industries_id; a list of indices at industry-level, corresponding to the sectors they belong to.
+    """
+    # find unique names of sectors
+    usectors = np.unique(sectors)
+    num_sectors = len(usectors)
+    # provide sector IDs at stock-level
+    sectors_id = [np.where(usectors == sector)[0][0] for sector in sectors]
+    # find unique names of industries and store indices
+    uindustries, industries_idx = np.unique(industries, return_index=True)
+    num_industries = len(uindustries)
+    # provide industry IDs at stock-level
+    industries_id = [np.where(uindustries == industry)[0][0] for industry in industries]
+    # provide sector IDs at industry-level
+    sector_industries_id = np.array(sectors_id)[industries_idx].tolist()
+
+    # place relevant information in dictionary
+    return dict(num_sectors=num_sectors, num_industries=num_industries, industries_id=industries_id,
+                sectors_id=sectors_id, sector_industries_id=sector_industries_id)

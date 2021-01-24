@@ -31,18 +31,37 @@ When the run is complete, a prediction table like the following will appear prin
 For each symbol, the table tells you its sector and industry, then the last available price and finally a rating. Possible ratings are HIGHLY ABOVE TREND, ABOVE TREND, ALONG TREND, BELOW TREND and HIGHLY BELOW TREND. Symbols appear in the table ranked from the furthest below to the furthest above their respective trends. Ranking and rating are derived from a score metric that compares the predicted price in 5 trading days (usually this corresponds to the price in one week) to the last available observed price, scaling by the standard deviation of the prediction; see the technical part below for more details. The prediction table can be saved in the current directory as `prediction_table.csv` by adding the following flag to the command above: `--save-table`.
 
 In the current directory, several estimation plots will appear. `stock_estimation.png` is a visualisation of stock prices and their estimations over the last year, together with a notion of uncertainty and daily trading volume. Only stocks rated either above or below their trends will be plotted, ranked as in the prediction table. Notice how the estimation crucially attempts to reproduce the trend of a stock but not to learn its noise. The uncertainty, on the other hand, depends on the stock volatility; the smaller the volatility, the more confident we are about our estimates, the more a sudden shift from the trend will be regarded as significant. You can use this plot as a sanity check that the estimation procedure agrees with your intuition. Make sure to glance at it before any transaction.
+
 <img width="994" alt="Screenshot 2021-01-19 at 16 29 26" src="https://user-images.githubusercontent.com/32386694/105055924-825c0000-5a6b-11eb-9936-de49abc7a151.png">
 
  `sector_estimation.png` and `industry_estimation.png` are plots that help you to quickly visualise estimated sector and industry performances. A sector estimate can be thought as the average behaviour of its belonging industries, which in turn should be regarded as the average behaviour of its belonging stocks. Both sectors and industries are ranked in alphabetical order. 
+ 
 <img width="1329" alt="Screenshot 2021-01-19 at 16 30 31" src="https://user-images.githubusercontent.com/32386694/105055907-7ec87900-5a6b-11eb-88c5-8e152397a1d6.png">
 
 <img width="994" alt="Screenshot 2021-01-19 at 16 29 59" src="https://user-images.githubusercontent.com/32386694/105055915-80923c80-5a6b-11eb-8d18-35782a9a527e.png">
 
 Finally,  `market_estimation.png` shows the overall estimated market trend. This can be considered as the average of the sector estimates. Use this plot to immediately know in what phase the stock market currently is.
+
 <img width="923" alt="Screenshot 2021-01-19 at 16 30 16" src="https://user-images.githubusercontent.com/32386694/105055901-7d974c00-5a6b-11eb-8ece-16d6a99ac5ff.png">
+
 If you do not want plots to be saved in the current directory, you can disable them by adding the flag `--no-plots`.
 
-You can also provide a list of symbols directly in the command line using the flag `-s`; for example, type `python volatile.py -s AAPL GOOGL`. In this case, Volatile will perform analysis exclusively based on AAPL and GOOGL. Mind that if the list of symbols is rather small, Volatile will not have enough exposure to the market to provide accurate results.
+### Bot-tournament
+In order to argue whether the information provided by Volatile were any useful in the past, we offer the possibility to run a "tournament", where a set of bots trades daily according to some pre-fixed strategies, which are described further below. Please mind that the tournament is a *simplified* market scenario where bots are allowed to buy and sell once a day, only and exactly at adjusted closing prices. Price variations intra-trading session, transaction fees, slippage and dividends are currently not simulated. You can run the tournament as follows:
+```ruby
+python tournament.py
+```
+By default, the tournament runs for 30 days of trading. You can change it, for example, to 10 days by adding the flag `--days 10` to the command above. Furthermore, bots start with an initial capital of 100000 USD; if you instead wanted, let us say, 5000 EUR, you can add the flags `--capital 5000` and `--currency EUR`. 
+
+While the tournament is running, you will be able to see its current state parsed in your shell. For example:
+
+<img width="1113" alt="Screenshot 2021-01-24 at 19 41 25" src="https://user-images.githubusercontent.com/32386694/105640211-b7ee5800-5e74-11eb-9418-fae506124fde.png">
+
+For every day of the tournament and each bot, you can see its total capital, how much of it is invested and uninvested, and a list of stock the bot owns. When the tournament is over, a plot of capitals over time like the following is saved in the current directory as `tournament_capitals.png`. A more technical piece of information: to avoid excessive computational burden, during the tournament Volatile does not perform order selection of the regression polynomial in the model, but rather fix it to <a href="https://www.codecogs.com/eqnedit.php?latex=D=2" target="_blank"><img src="https://latex.codecogs.com/gif.latex?D=2" title="D=2" /></a>; see the technical section below for background about this.
+
+<img height="350" alt="Screenshot 2021-01-24 at 19 46 41" src="https://user-images.githubusercontent.com/32386694/105640213-ba50b200-5e74-11eb-8214-913d96257301.png">
+
+In this case, Betty notably leads the way, making over 35% of her initial capital in only 30 days of trading.
 
 ### How to install
 The easiest way to use Volatile is to:
@@ -114,3 +133,85 @@ Then, stocks are rated according to the following criteria:
 
 **Currency conversion.** If the symbols passed to Volatile have different price currencies, we first find the most common currency and set it as default, then we download the last year of exchange rate information and convert all currencies to the default one. Training and score metric computation are executed using converted prices. Mathematically, if <a href="https://www.codecogs.com/eqnedit.php?latex=p_{t,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?p_{t,i}" title="p_{t,i}" /></a> is the price of a certain stock in its currency, we define <a href="https://www.codecogs.com/eqnedit.php?latex=\tilde{p}_{t,i}=r_{t,\text{curr}(i)}p_{t,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\tilde{p}_{t,i}=r_{t,\text{curr}(i)}p_{t,i}" title="\tilde{p}_{t,i}=r_{t,\text{curr}(i)}p_{t,i}" /></a> to be the converted price, where <a href="https://www.codecogs.com/eqnedit.php?latex=r_{t,\text{curr}(i)}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?r_{t,\text{curr}(i)}" title="r_{t,\text{curr}(i)}" /></a> is the exchange rate from the original currency <a href="https://www.codecogs.com/eqnedit.php?latex=\text{curr}(i)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\text{curr}(i)" title="\text{curr}(i)" /></a> to the default one. Then, the corresponding log-prices follow the relation <a href="https://www.codecogs.com/eqnedit.php?latex=\tilde{y}_{t,i}=\log&space;r_{t,\text{curr}(i)}&plus;y_{t,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\tilde{y}_{t,i}=\log&space;r_{t,\text{curr}(i)}&plus;y_{t,i}" title="\tilde{y}_{t,i}=\log r_{t,\text{curr}(i)}+y_{t,i}" /></a>. Because we model <a href="https://www.codecogs.com/eqnedit.php?latex=y_{t,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?y_{t,i}" title="y_{t,i}" /></a> as a Gaussian, <a href="https://www.codecogs.com/eqnedit.php?latex=\tilde{y}_{t,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\tilde{y}_{t,i}" title="\tilde{y}_{t,i}" /></a> is also a Gaussian with the additional log-exchange rate in the mean and same standard deviation. Therefore, after mean and standard deviation estimates of <a href="https://www.codecogs.com/eqnedit.php?latex=\tilde{y}_{t,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\tilde{y}_{t,i}" title="\tilde{y}_{t,i}" /></a> are computed, estimators for <a href="https://www.codecogs.com/eqnedit.php?latex=y_{t,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?y_{t,i}" title="y_{t,i}" /></a> can be promptly obtained, from which log-Normal mean and standard deviation estimators of <a href="https://www.codecogs.com/eqnedit.php?latex=p_{t,i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?p_{t,i}" title="p_{t,i}" /></a> can in turn be produced.
 
+### Bots description
+Meet the participants of the bot-tournament! Remember: you can run the tournament via `python tournament.py`.
+
+<table>
+<tr>
+<td width=170>
+
+<img src='https://avataaars.io/?avatarStyle=Circle&topType=ShortHairDreads02&accessoriesType=Blank&hairColor=Platinum&facialHairType=BeardMedium&facialHairColor=BlondeGolden&clotheType=BlazerSweater&eyeType=EyeRoll&eyebrowType=UpDownNatural&mouthType=Disbelief&skinColor=Brown' width="150"
+/>
+
+</td>
+<td>
+  
+### Adam
+Adam is a fairly cautious trader: he picks up very cheap stocks and tries to make a small profit out of them. He buys a stock only if it is rated as HIGHLY BELOW TREND, with a maximum transaction of 3.33% of his current capital. He sells a stock as soon as he makes a 3% profit or a 10% loss from it.
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width=170>
+
+<img src='https://avataaars.io/?avatarStyle=Circle&topType=Turban&accessoriesType=Kurt&hatColor=PastelRed&facialHairType=Blank&clotheType=ShirtScoopNeck&clotheColor=Blue02&eyeType=Close&eyebrowType=DefaultNatural&mouthType=Default&skinColor=DarkBrown' width="150" alt="avatar"
+/>
+
+</td>
+<td>
+  
+### Betty
+Betty is a risk-lover: she believes that what is going up will keep going up and jumps on it. She buys a stock only if it is rated as HIGHLY ABOVE TREND, with a maximum transaction of 3.33% of her current capital. She sells a stock as soon as she makes a 10% profit or a 3% loss from it.
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width=170>
+
+<img src='https://avataaars.io/?avatarStyle=Circle&topType=WinterHat2&accessoriesType=Wayfarers&hatColor=Blue03&facialHairType=Blank&clotheType=ShirtVNeck&clotheColor=Red&eyeType=Happy&eyebrowType=RaisedExcitedNatural&mouthType=ScreamOpen&skinColor=Yellow' width="150" alt="avatar"
+/>
+
+</td>
+<td>
+  
+### Chris
+Chris is a tech-lover: he will buy his favourite tech stocks as soon as possible, as much as possible, and hold them until retirement. They are AMZN, GOOGL, FB, AAPL, MSFT.
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width=170>
+
+<img src='https://avataaars.io/?avatarStyle=Circle&topType=LongHairFrida&accessoriesType=Blank&facialHairType=Blank&clotheType=Overall&clotheColor=Heather&eyeType=Squint&eyebrowType=RaisedExcited&mouthType=Smile&skinColor=Tanned'
+/>
+
+</td>
+<td>
+  
+### Dany
+Dany believes that if she waits long enough, cheap stocks will make a profit. She buys a stock only if it is rated as HIGHLY BELOW TREND or BELOW TREND, with a maximum transaction of 3.33% of her current capital. She sells a stock as soon as she makes a 10% profit or a 20% loss from it.
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width=170>
+
+<img src='https://avataaars.io/?avatarStyle=Circle&topType=LongHairCurly&accessoriesType=Blank&hairColor=Brown&facialHairType=BeardLight&facialHairColor=BrownDark&clotheType=ShirtScoopNeck&clotheColor=White&eyeType=Wink&eyebrowType=UnibrowNatural&mouthType=Smile&skinColor=Light'
+/>
+
+</td>
+<td>
+  
+### Eddy
+Eddy prefers stocks that are going fairly strong. He buys a stock only if it is rated as HIGHLY ABOVE TREND or ABOVE TREND, with a maximum transaction of 3.33% of his current capital. He sells a stock as soon as he makes a 20% profit or a 10% loss from it.
+</td>
+</tr>
+</table>
