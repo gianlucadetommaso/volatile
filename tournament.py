@@ -5,7 +5,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 
-from volatile import select_order
 from tools import convert_currency, extract_hierarchical_info
 
 from download import download, get_exchange_rates

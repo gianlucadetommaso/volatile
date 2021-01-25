@@ -147,52 +147,6 @@ def softplus(x: np.array) -> np.array:
     """
     return np.log(1 + np.exp(x))
 
-def select_order(logp: np.array, info: dict, orders: np.array = np.arange(1, 14), horizon: int = 5) -> int:
-    """
-    Select the order of the polynomial minimizing an empirical second moment metrics, using the last week of data as
-    test set.
-
-    Parameters
-    ----------
-    logp: np.array
-        Log-prices at stock-level.
-    info: dict
-        Data information.
-    orders: np.array
-        Array of candidate orders.
-    horizon: int
-        Number of days to evaluate prediction.
-    """
-    print("\nModel selection in progress. This can take a few minutes...")
-    t = logp[:, :-horizon].shape[1]
-    min_loss = np.inf
-    count = 0
-    for i, order in enumerate(orders):
-        info['tt'] = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
-        info['order_scale'] = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
-
-        # train the model
-        phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp[:, :-horizon], info)
-
-        # construct loss
-        tt_pred = ((1 + (np.arange(1, 1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
-        logp_pred = np.dot(phi.numpy(), tt_pred)
-        std_logp_pred = softplus(psi.numpy())
-        scores = (logp_pred - logp[:, -horizon:]) / std_logp_pred
-        loss = np.abs(np.mean(scores ** 2) - 1)
-
-        print("Loss value for backtested polynomial model of order {}: {}.".format(order, loss))
-        if i > 0 and loss > min_loss:
-            count += 1
-        else:
-            min_loss = loss
-            min_order = order
-            count = 0
-        if count == 3:
-            break
-    print("Model selection completed. Volatile will use a polynomial model of degree {}.".format(min_order))
-    return min_order
-
 def rate(scores: np.array, thresholds: dict = None) -> list:
     """
     Rate scores according to `thresholds`. Possible rates are `HIGHLY BELOW TREND`, `BELOW TREND`, `ALONG TREND`,
@@ -261,7 +215,7 @@ if __name__ == '__main__':
     # how many days to look ahead when comparing the current price against a prediction
     horizon = 5
     # order of the polynomial
-    order = select_order(logp, info)
+    order = 2
 
     print("\nTraining the model...")
 
