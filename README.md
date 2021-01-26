@@ -18,7 +18,7 @@ The word "volatile" comes from the Latin *volatilis*, meaning "having wings" or 
 If you expect Volatile to predict the unpredictable, you are in the wrong place. Be reasonable: this is a swing trading software, runnable on your laptop, aimed to quickly discover out-of-trend opportunities by comparing current stock prices to their projections in a few days. If the current price is much lower than its future projection, perhaps it is a good opportunity to buy; vice versa, if it is much higher, perhaps it is a good moment to sell. This does neither mean the projection will be necessarily met, nor that you will make a short-term profit for every single transaction you make. Anything could happen. However, running Volatile on a daily basis will put you in condition to very quickly survey the market, find good opportunities and base your trading decisions on models, algorithms and data. 
 
 ### What to expect and how to use
-Volatiles estimates stock trends, predict short-term future prices, then ranks and rates. All you need to do to run Volatile is to open your terminal and type
+Volatiles estimates stock trends, predict short-term future prices, then ranks, rates and quantifies growth. All you need to do to run Volatile is to open your terminal and type
 ```ruby
 python volatile.py
 ```
@@ -26,23 +26,23 @@ Volatile will automatically analyse the list of stock symbols saved in `symbols_
 
 When the run is complete, a prediction table like the following will appear printed on your shell:
 
-<img width="929" alt="Screenshot 2021-01-19 at 16 28 27" src="https://user-images.githubusercontent.com/32386694/105055893-7c661f00-5a6b-11eb-8d21-932b7b93665d.png">
+<img width="982" alt="Screenshot 2021-01-26 at 23 21 47" src="https://user-images.githubusercontent.com/32386694/105914091-bd3ed480-6025-11eb-8f8d-a3eb143fd03b.png">
 
-For each symbol, the table tells you its sector and industry, then the last available price and finally a rating. Possible ratings are HIGHLY ABOVE TREND, ABOVE TREND, ALONG TREND, BELOW TREND and HIGHLY BELOW TREND. Symbols appear in the table ranked from the furthest below to the furthest above their respective trends. Ranking and rating are derived from a score metric that compares the predicted price in 5 trading days (usually this corresponds to the price in one week) to the last available observed price, scaling by the standard deviation of the prediction; see the technical part below for more details. The prediction table can be saved in the current directory as `prediction_table.csv` by adding the following flag to the command above: `--save-table`.
+For each symbol, the table tells you its sector and industry, then the last available price, a rate and a slope indicator. Possible rates are HIGHLY ABOVE TREND, ABOVE TREND, ALONG TREND, BELOW TREND and HIGHLY BELOW TREND. They are derived from a score metric that compares the predicted price in 5 trading days (usually this corresponds to the price in one week) to the last available observed price, scaling by the standard deviation of the prediction; see the technical part below for more details. The slope indication is a real number (positive or negative) corresponding to the slope of the trend at current time. Particularly for stocks ALONG TREND, this is an interesting parameter to quantify how strongly they are going up or down. By default, symbols appear in the table ranked from the furthest below to the furthest above their respective trends; alternatively, you can rank according to the slope indicator, from largest to smallest, by adding the following flag to the command above: `--rank slope`.  The prediction table can be saved in the current directory as `prediction_table.csv`  using the flag `--save-table`.
 
 In the current directory, several estimation plots will appear. `stock_estimation.png` is a visualisation of stock prices and their estimations over the last year, together with a notion of uncertainty and daily trading volume. Only stocks rated either above or below their trends will be plotted, ranked as in the prediction table. Notice how the estimation crucially attempts to reproduce the trend of a stock but not to learn its noise. The uncertainty, on the other hand, depends on the stock volatility; the smaller the volatility, the more confident we are about our estimates, the more a sudden shift from the trend will be regarded as significant. You can use this plot as a sanity check that the estimation procedure agrees with your intuition. Make sure to glance at it before any transaction.
 
-<img width="994" alt="Screenshot 2021-01-19 at 16 29 26" src="https://user-images.githubusercontent.com/32386694/105055924-825c0000-5a6b-11eb-9936-de49abc7a151.png">
+<img width="907" alt="Screenshot 2021-01-26 at 23 24 49" src="https://user-images.githubusercontent.com/32386694/105914098-bfa12e80-6025-11eb-89c8-35481012e02d.png">
 
  `sector_estimation.png` and `industry_estimation.png` are plots that help you to quickly visualise estimated sector and industry performances. A sector estimate can be thought as the average behaviour of its belonging industries, which in turn should be regarded as the average behaviour of its belonging stocks. Both sectors and industries are ranked in alphabetical order. 
  
-<img width="1329" alt="Screenshot 2021-01-19 at 16 30 31" src="https://user-images.githubusercontent.com/32386694/105055907-7ec87900-5a6b-11eb-88c5-8e152397a1d6.png">
+<img width="1334" alt="Screenshot 2021-01-26 at 23 23 10" src="https://user-images.githubusercontent.com/32386694/105914112-c334b580-6025-11eb-8b94-c5cf2f5e950d.png">
 
-<img width="994" alt="Screenshot 2021-01-19 at 16 29 59" src="https://user-images.githubusercontent.com/32386694/105055915-80923c80-5a6b-11eb-8d18-35782a9a527e.png">
+<img width="1014" alt="Screenshot 2021-01-26 at 23 23 53" src="https://user-images.githubusercontent.com/32386694/105914118-c6c83c80-6025-11eb-95c8-00e766a9a894.png">
 
 Finally,  `market_estimation.png` shows the overall estimated market trend. This can be considered as the average of the sector estimates. Use this plot to immediately know in what phase the stock market currently is.
 
-<img width="923" alt="Screenshot 2021-01-19 at 16 30 16" src="https://user-images.githubusercontent.com/32386694/105055901-7d974c00-5a6b-11eb-8ece-16d6a99ac5ff.png">
+<img width="920" alt="Screenshot 2021-01-26 at 23 28 41" src="https://user-images.githubusercontent.com/32386694/105914182-de072a00-6025-11eb-9ef1-257b4a8a9bad.png">
 
 If you do not want plots to be saved in the current directory, you can disable them by adding the flag `--no-plots`.
 
@@ -55,11 +55,11 @@ By default, the tournament runs for 30 days of trading. You can change it, for e
 
 While the tournament is running, you will be able to see its current state parsed in your shell. For example:
 
-<img width="1113" alt="Screenshot 2021-01-24 at 19 41 25" src="https://user-images.githubusercontent.com/32386694/105640211-b7ee5800-5e74-11eb-9418-fae506124fde.png">
+<img width="883" alt="Screenshot 2021-01-27 at 00 10 47" src="https://user-images.githubusercontent.com/32386694/105918399-c337b400-602b-11eb-84ea-40da1ea073f7.png">
 
 For every day of the tournament and each bot, you can see its total capital, how much of it is invested and uninvested, and a list of stock the bot owns. When the tournament is over, a plot of capitals over time like the following is saved in the current directory as `tournament_capitals.png`.
 
-<img height="350" alt="Screenshot 2021-01-24 at 19 46 41" src="https://user-images.githubusercontent.com/32386694/105640213-ba50b200-5e74-11eb-8214-913d96257301.png">
+<img width="1157" alt="Screenshot 2021-01-26 at 23 57 46" src="https://user-images.githubusercontent.com/32386694/105918233-810e7280-602b-11eb-9549-26c6839c91e9.png">
 
 In this case, Betty notably leads the way, making over 35% of her initial capital in only 30 days of trading.
 
@@ -114,7 +114,7 @@ Parameters at market-level <a href="https://www.codecogs.com/eqnedit.php?latex=\
 
 **Stock-level estimates.** Obtained our estimates <a href="https://www.codecogs.com/eqnedit.php?latex=\hat\phi^m,\hat\phi^s,\hat\phi^\iota,\hat\phi,\hat\psi^m,\hat\psi^s,\hat\psi^\iota\text{&space;and&space;}&space;\hat\psi" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat\phi^m,\hat\phi^s,\hat\phi^\iota,\hat\phi,\hat\psi^m,\hat\psi^s,\hat\psi^\iota\text{&space;and&space;}&space;\hat\psi" title="\hat\phi^m,\hat\phi^s,\hat\phi^\iota,\hat\phi,\hat\psi^m,\hat\psi^s,\hat\psi^\iota\text{ and } \hat\psi" /></a>, we can use the likelihood mean <a href="https://www.codecogs.com/eqnedit.php?latex=\hat&space;y_{t,i}=\sum_{j=0}^{D}\hat\phi_{i,j}\,\tau_t^j" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat&space;y_{t,i}=\sum_{j=0}^{D}\hat\phi_{i,j}\,\tau_t^j" title="\hat y_{t,i}=\sum_{j=0}^{D}\hat\phi_{i,j}\,\tau_t^j" /></a> as an estimator of the log-prices for any time in the past, as well as a predictor for times in the short future. As a measure of uncertainty, we take the learned scale of the likelihood, that is <a href="https://www.codecogs.com/eqnedit.php?latex=\hat\sigma_i=\text{softplus}(\psi_i)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat\sigma_i=\text{softplus}(\psi_i)" title="\hat\sigma_i=\text{softplus}(\psi_i)" /></a>.
 
-**Ranking and rating.** Given the selected model complexity, Volatile trains the model and provides a rating for each stock by introducing the following score:
+**Ranking and rating.** Given the selected model complexity, Volatile trains the model and provides a rate for each stock by introducing the following score:
 
 <a href="https://www.codecogs.com/eqnedit.php?latex=\text{score}_i=\frac{\hat&space;y_{T&plus;5,i}-y_{T,i}}{\hat\sigma_i}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\text{score}_i=\frac{\hat&space;y_{T&plus;5,i}-y_{T,i}}{\hat\sigma_i}" title="\text{score}_i=\frac{\hat y_{T+5,i}-y_{T,i}}{\hat\sigma_i}" /></a>
 
@@ -145,7 +145,7 @@ Meet the participants of the bot-tournament! Remember: you can run the tournamen
 <td>
   
 ### Adam
-Adam is a fairly cautious trader: he picks up very cheap stocks and tries to make a small profit out of them. He buys a stock only if it is rated as HIGHLY BELOW TREND, with a maximum transaction of 3.33% of his current capital. He sells a stock as soon as he makes a 3% profit or a 10% loss from it.
+Adam is a fairly cautious trader: he picks up very cheap stocks and tries to make a small profit out of them. He buys a stock only if it is rated as HIGHLY BELOW TREND, with a maximum transaction of 3.33% of his current capital. He sells a stock as soon as he makes a 3% profit or a 10% loss out of it.
 </td>
 </tr>
 </table>
@@ -161,7 +161,7 @@ Adam is a fairly cautious trader: he picks up very cheap stocks and tries to mak
 <td>
   
 ### Betty
-Betty is a risk-lover: she believes that what is going up will keep going up and jumps on it. She buys a stock only if it is rated as HIGHLY ABOVE TREND, with a maximum transaction of 3.33% of her current capital. She sells a stock as soon as she makes a 10% profit or a 3% loss from it.
+Betty is a risk-lover: she believes that what is going up will keep going up and jumps on it. She buys a stock only if it is rated as HIGHLY ABOVE TREND, with a maximum transaction of 3.33% of her current capital. She sells a stock as soon as she makes a 10% profit or a 3% loss out of it.
 </td>
 </tr>
 </table>
@@ -193,7 +193,7 @@ Chris is a tech-lover: he will buy his favourite tech stocks as soon as possible
 <td>
   
 ### Dany
-Dany believes that if she waits long enough, cheap stocks will make a profit. She buys a stock only if it is rated as HIGHLY BELOW TREND or BELOW TREND, with a maximum transaction of 3.33% of her current capital. She sells a stock as soon as she makes a 10% profit or a 20% loss from it.
+Dany believes that if she waits long enough, cheap stocks will make a profit. She buys a stock only if it is rated as HIGHLY BELOW TREND or BELOW TREND, with a maximum transaction of 3.33% of her current capital. She sells a stock as soon as she makes a 10% profit or a 20% loss out of it.
 </td>
 </tr>
 </table>
@@ -209,7 +209,23 @@ Dany believes that if she waits long enough, cheap stocks will make a profit. Sh
 <td>
   
 ### Eddy
-Eddy prefers stocks that are going fairly strong. He buys a stock only if it is rated as HIGHLY ABOVE TREND or ABOVE TREND, with a maximum transaction of 3.33% of his current capital. He sells a stock as soon as he makes a 20% profit or a 10% loss from it.
+Eddy prefers stocks that are going fairly strong. He buys a stock only if it is rated as HIGHLY ABOVE TREND or ABOVE TREND, with a maximum transaction of 3.33% of his current capital. He sells a stock as soon as he makes a 20% profit or a 10% loss out of it.
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width=170>
+
+<img src='https://avataaars.io/?avatarStyle=Circle&topType=LongHairFro&accessoriesType=Blank&hairColor=Auburn&facialHairType=Blank&clotheType=ShirtVNeck&clotheColor=PastelOrange&eyeType=Squint&eyebrowType=Angry&mouthType=Default&skinColor=Light'
+/>
+
+</td>
+<td>
+  
+### Flora
+Flora likes strong and steady growing stocks. She buys stocks ALONG TREND with the largest positive SLOPE, with a maximum transaction of 3.33% of his current capital. Her goal is to have around 30 stocks in her portfolio. She sells a stock as soon as she makes a 10% profit or a 20% loss out of it.
 </td>
 </tr>
 </table>

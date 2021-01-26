@@ -185,6 +185,10 @@ if __name__ == '__main__':
     cli = ArgumentParser('Volatile: your day-to-day trading companion.',
                          formatter_class=ArgumentDefaultsHelpFormatter)
     cli.add_argument('-s', '--symbols', type=str, nargs='+', help=SUPPRESS)
+    cli.add_argument('--rank', type=str, default="rate",
+                     help="If `rate`, stocks are ranked in the prediction table and in the stock estimation plot from "
+                          "the highest below to the highest above trend; if `slope`, ranking is done from the largest"
+                          " to the smallest trend slope at the last date.")
     cli.add_argument('--save-table', action='store_true',
                      help='Save prediction table in csv format.')
     cli.add_argument('--no-plots', action='store_true',
@@ -192,6 +196,9 @@ if __name__ == '__main__':
     cli.add_argument('--plot-losses', action='store_true',
                      help='Plot loss function decay over training iterations.')
     args = cli.parse_args()
+
+    if args.rank.lower() not in ["rate", "slope"]:
+        raise Exception("{} not recognized. Please provide one between `rate` and `slope`.".format(args.rank))
 
     today = dt.date.today().strftime("%Y-%m-%d")
 
@@ -249,6 +256,8 @@ if __name__ == '__main__':
 
     # compute score
     scores = (logp_pred[:, horizon] - logp[:, -1]) / std_logp_pred.squeeze()
+    # compute slope
+    slope = np.dot(phi.numpy()[:, 1:], np.arange(1, order + 1))
 
     # convert log-price currencies back (standard deviations of log-prices stay the same)
     for i, curr in enumerate(data['currencies']):
@@ -274,13 +283,14 @@ if __name__ == '__main__':
     std_p_mkt_est = np.sqrt(np.exp(2 * logp_mkt_est + std_logp_mkt_est ** 2) * (np.exp(std_logp_mkt_est ** 2) - 1))
 
     # rank according to score
-    rank = np.argsort(scores)[::-1]
+    rank = np.argsort(scores)[::-1] if args.rank == "rate" else np.argsort(slope)[::-1]
     ranked_tickers = np.array(tickers)[rank]
     ranked_scores = scores[rank]
     ranked_p = data['price'][rank]
     ranked_p_est = p_est[rank]
     ranked_std_p_est = std_p_est[rank]
     ranked_currencies = np.array(data['currencies'])[rank]
+    ranked_slope = slope[rank]
 
     # rate stockes
     ranked_rates = rate(ranked_scores)
@@ -428,15 +438,16 @@ if __name__ == '__main__':
     ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["sectors"])[rank]]
     ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["industries"])[rank]]
 
-    strf = "{:<15} {:<26} {:<42} {:<25} {:<15}"
-    num_dashes = 131
+    strf = "{:<15} {:<26} {:<42} {:<24} {:<22} {:<5}"
+    num_dashes = 139
     separator = num_dashes * "-"
     print(num_dashes * "-")
-    print(strf.format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATING"))
+    print(strf.format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATE", "SLOPE"))
     print(separator)
     for i in range(num_stocks):
         print(strf.format(ranked_tickers[i], ranked_sectors[i], ranked_industries[i],
-                          "{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]), ranked_rates[i]))
+                          "{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]), ranked_rates[i],
+                          "{}{}".format("+" if ranked_slope[i] >= 0 else "", np.round(ranked_slope[i], 2))))
         print(separator)
         if i < num_stocks - 1 and ranked_rates[i] != ranked_rates[i + 1]:
             print(separator)
@@ -447,7 +458,8 @@ if __name__ == '__main__':
                     ['SECTOR'] + ranked_sectors,
                     ['INDUSTRY'] + ranked_industries,
                     ["LAST AVAILABLE PRICE"] + ["{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]) for i in range(num_stocks)],
-                    ["RATING"] + ranked_rates)
+                    ["RATE"] + ranked_rates,
+                    ["SLOPE"] + ranked_rates)
         with open(tab_name, 'w') as file:
             wr = csv.writer(file)
             for row in table:

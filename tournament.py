@@ -61,7 +61,7 @@ if __name__ == '__main__':
     info['order_scale'] = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
 
     # tournament participants
-    names = ["Adam", "Betty", "Chris", "Dany", "Eddy"]
+    names = ["Adam", "Betty", "Chris", "Dany", "Eddy", "Flora"]
     tournament = {name: globals()[name](args.capital) for name in names}
 
     # initialize capitals
@@ -69,8 +69,8 @@ if __name__ == '__main__':
     invested = np.zeros((len(names), args.days))
     capitals = np.zeros((len(names), args.days))
 
-    str_format = "{:<20} {:<25} {:<25} {:<25} {:<80}"
-    num_dashes = 175
+    str_format = "{:<11} {:<20} {:<20} {:<20} {:<60}"
+    num_dashes = 110
     separator = num_dashes * "-"
 
     print("\n*** LET'S THE BOT-TOURNAMENT BEGINS! ***\n")
@@ -85,8 +85,9 @@ if __name__ == '__main__':
         std_logp_pred = softplus(psi.numpy())
         scores = (logp_pred[:, horizon] - logp[:, -j - 1]) / std_logp_pred.squeeze()
         rates = rate(scores)
+        slope = np.dot(phi.numpy()[:, 1:], np.arange(1, order + 1))
 
-        bot_info = {tickers[i]: {"price": price[i, -j - 1], "rate": rates[i]} for i in range(num_stocks)}
+        bot_info = {tickers[i]: {"price": price[i, -j - 1], "rate": rates[i], "slope": slope[i]} for i in range(num_stocks)}
         next_price = {tickers[i]: price[i, -j] for i in range(num_stocks)}
 
         print()

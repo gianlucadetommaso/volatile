@@ -10,10 +10,24 @@ class Bot:
         self.invested = 0
         self.portfolio = {} if portfolio is None else portfolio
 
+    def transact_capital(self, ticker, units: int, price: float, type: str):
+        if type == "sell":
+            transaction = units * price
+            self.uninvested += transaction
+            del self.portfolio[ticker]
+
+        elif type == "buy":
+            transaction = units * price
+            self.uninvested -= transaction
+            self.portfolio[ticker] = {"units": units, "purchase_price": price}
+
+        else:
+            raise Exception("Transaction type {} not recognised. Choose between `sell` and `buy`.".format(type))
+
     def compute_capital(self, price: dict):
         self.invested = 0.0
         for ticker in self.portfolio:
-            self.invested += self.portfolio[ticker]['number'] * price[ticker]
+            self.invested += self.portfolio[ticker]['units'] * price[ticker]
         self.capital = self.uninvested + self.invested
 
 class Adam(Bot):
@@ -29,18 +43,14 @@ class Adam(Bot):
             purchase_price = self.portfolio[ticker]["purchase_price"]
             rel_margin = (info[ticker]['price'] - purchase_price) / purchase_price
             if rel_margin > self.min_rel_profit or rel_margin < -self.max_rel_loss:
-                transaction = self.portfolio[ticker]['number'] * info[ticker]['price']
-                self.uninvested += transaction
-                del self.portfolio[ticker]
+                self.transact_capital(ticker, self.portfolio[ticker]['units'], info[ticker]['price'], type="sell")
 
         ## buy strategy
         for ticker in info:
             if ticker not in self.portfolio.keys() and info[ticker]['rate'] == "HIGHLY BELOW TREND":
-                num = int(np.minimum(self.uninvested, self.capital / 30) // info[ticker]['price'])
-                if num >= 1:
-                    transaction = num * info[ticker]['price']
-                    self.uninvested -= transaction
-                    self.portfolio[ticker] = {"number": num, "purchase_price": info[ticker]['price']}
+                units = int(np.minimum(self.uninvested, self.capital / 30) // info[ticker]['price'])
+                if units >= 1:
+                    self.transact_capital(ticker, units, info[ticker]['price'], type="buy")
 
 class Betty(Bot):
     def __init__(self, capital: float, portfolio: dict = None):
@@ -55,18 +65,14 @@ class Betty(Bot):
             purchase_price = self.portfolio[ticker]["purchase_price"]
             rel_margin = (info[ticker]['price'] - purchase_price) / purchase_price
             if rel_margin > self.min_rel_profit or rel_margin < -self.max_rel_loss:
-                transaction = self.portfolio[ticker]['number'] * info[ticker]['price']
-                self.uninvested += transaction
-                del self.portfolio[ticker]
+                self.transact_capital(ticker, self.portfolio[ticker]['units'], info[ticker]['price'], type="sell")
 
         ## buy strategy
         for ticker in info:
             if ticker not in self.portfolio.keys() and info[ticker]['rate'] == "HIGHLY ABOVE TREND":
-                num = int(np.minimum(self.uninvested, self.capital / 30) // info[ticker]['price'])
-                if num >= 1:
-                    transaction = num * info[ticker]['price']
-                    self.uninvested -= transaction
-                    self.portfolio[ticker] = {"number": num, "purchase_price": info[ticker]['price']}
+                units = int(np.minimum(self.uninvested, self.capital / 30) // info[ticker]['price'])
+                if units >= 1:
+                    self.transact_capital(ticker, units, info[ticker]['price'], type="buy")
 
 class Chris(Bot):
     def __init__(self, capital: float, portfolio: dict = None):
@@ -79,11 +85,9 @@ class Chris(Bot):
         for ticker in buy_only:
             if ticker in info:
                 count = np.maximum(1, len(buy_only) - len(self.portfolio))
-                num = int(self.uninvested / count // info[ticker]['price'])
-                if num >= 1:
-                    transaction = num * info[ticker]['price']
-                    self.uninvested -= transaction
-                    self.portfolio[ticker] = {"number": num, "purchase_price": info[ticker]['price']}
+                units = int(self.uninvested / count // info[ticker]['price'])
+                if units >= 1:
+                    self.transact_capital(ticker, units, info[ticker]['price'], type="buy")
 
 class Dany(Bot):
     def __init__(self, capital: float, portfolio: dict = None):
@@ -98,18 +102,14 @@ class Dany(Bot):
             purchase_price = self.portfolio[ticker]["purchase_price"]
             rel_margin = (info[ticker]['price'] - purchase_price) / purchase_price
             if rel_margin > self.min_rel_profit or rel_margin < -self.max_rel_loss:
-                transaction = self.portfolio[ticker]['number'] * info[ticker]['price']
-                self.uninvested += transaction
-                del self.portfolio[ticker]
+                self.transact_capital(ticker, self.portfolio[ticker]['units'], info[ticker]['price'], type="sell")
 
         ## buy strategy
         for ticker in info:
             if ticker not in self.portfolio.keys() and info[ticker]['rate'] in ["HIGHLY BELOW TREND", "BELOW TREND"]:
-                num = int(np.minimum(self.uninvested, self.capital / 30) // info[ticker]['price'])
-                if num >= 1:
-                    transaction = num * info[ticker]['price']
-                    self.uninvested -= transaction
-                    self.portfolio[ticker] = {"number": num, "purchase_price": info[ticker]['price']}
+                units = int(np.minimum(self.uninvested, self.capital / 30) // info[ticker]['price'])
+                if units >= 1:
+                    self.transact_capital(ticker, units, info[ticker]['price'], type="buy")
 
 class Eddy(Bot):
     def __init__(self, capital: float, portfolio: dict = None):
@@ -124,15 +124,35 @@ class Eddy(Bot):
             purchase_price = self.portfolio[ticker]["purchase_price"]
             rel_margin = (info[ticker]['price'] - purchase_price) / purchase_price
             if rel_margin > self.min_rel_profit or rel_margin < -self.max_rel_loss:
-                transaction = self.portfolio[ticker]['number'] * info[ticker]['price']
-                self.uninvested += transaction
-                del self.portfolio[ticker]
+                self.transact_capital(ticker, self.portfolio[ticker]['units'], info[ticker]['price'], type="sell")
 
         ## buy strategy
         for ticker in info:
             if ticker not in self.portfolio.keys() and info[ticker]['rate'] in ["HIGHLY ABOVE TREND", "ABOVE TREND"]:
-                num = int(np.minimum(self.uninvested, self.capital / 30) // info[ticker]['price'])
-                if num >= 1:
-                    transaction = num * info[ticker]['price']
-                    self.uninvested -= transaction
-                    self.portfolio[ticker] = {"number": num, "purchase_price": info[ticker]['price']}
+                units = int(np.minimum(self.uninvested, self.capital / 30) // info[ticker]['price'])
+                if units >= 1:
+                    self.transact_capital(ticker, units, info[ticker]['price'], type="buy")
+
+class Flora(Bot):
+    def __init__(self, capital: float, portfolio: dict = None):
+        super().__init__(capital, portfolio)
+        self.min_rel_profit = 0.1
+        self.max_rel_loss = 0.2
+
+    def trade(self, info: dict):
+        ## sell strategy
+        owned_stocks = list(self.portfolio.keys())
+        for ticker in owned_stocks:
+            purchase_price = self.portfolio[ticker]["purchase_price"]
+            rel_margin = (info[ticker]['price'] - purchase_price) / purchase_price
+            if rel_margin > self.min_rel_profit or rel_margin < -self.max_rel_loss:
+                self.transact_capital(ticker, self.portfolio[ticker]['units'], info[ticker]['price'], type="sell")
+
+        ## buy strategy
+        diff = min(30, len(info)) - len(self.portfolio)
+        q = np.sort([info[ticker]['slope'] for ticker in info])[-diff] if diff > 0 else np.inf
+        for ticker in info:
+            if ticker not in self.portfolio.keys() and info[ticker]['rate'] == "ALONG TREND" and info[ticker]['slope'] >= max(q, 1):
+                units = int(np.minimum(self.uninvested, self.capital / 30) // info[ticker]['price'])
+                if units >= 1:
+                    self.transact_capital(ticker, units, info[ticker]['price'], type="buy")
