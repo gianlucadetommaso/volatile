@@ -51,7 +51,7 @@ In order to argue whether the information provided by Volatile were any useful i
 ```ruby
 python tournament.py
 ```
-By default, the tournament runs for 30 days of trading. You can change it, for example, to 10 days by adding the flag `--days 10` to the command above. Furthermore, bots start with an initial capital of 100000 USD; if you instead wanted, let us say, 5000 EUR, you can add the flags `--capital 5000` and `--currency EUR`. 
+By default, the tournament runs over the last month. However, you can change approximate start and end date by adding corresponding flags to the command above , e.g.: `--start 2020-12-01` and `--end 2021-01-26`. Furthermore, bots start with an initial capital of 100000 USD; if you instead wanted, let us say, 5000 EUR, you can add the flags `--capital 5000` and `--currency EUR`. 
 
 While the tournament is running, you will be able to see its current state parsed in your shell. For example:
 
@@ -225,7 +225,7 @@ Eddy prefers stocks that are going fairly strong. He buys a stock only if it is 
 <td>
   
 ### Flora
-Flora likes strong and steady growing stocks. She buys stocks ALONG TREND with the largest positive SLOPE, with a maximum transaction of 3.33% of his current capital. Her goal is to have around 30 stocks in her portfolio. She sells a stock as soon as she makes a 10% profit or a 20% loss out of it.
+Flora likes strong and steady growing stocks. She buys stocks ALONG TREND with the largest positive SLOPE, with a maximum transaction of 3.33% of her current capital. Her goal is to have around 30 stocks in her portfolio. She sells a stock as soon as she makes a 10% profit or a 20% loss out of it.
 </td>
 </tr>
 </table>

@@ -4,6 +4,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, SUPPRESS
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
+import datetime as dt
 
 from tools import convert_currency, extract_hierarchical_info
 
@@ -12,18 +13,24 @@ from volatile import softplus, train, rate
 from bots import *
 
 if __name__ == '__main__':
+    today = dt.date.today().strftime("%Y-%m-%d")
+    onemonthago = (dt.date.today() - dt.timedelta(30)).strftime("%Y-%m-%d")
+
     cli = ArgumentParser('Volatile Bot-Tournament.', formatter_class=ArgumentDefaultsHelpFormatter)
     cli.add_argument('-s', '--symbols', type=str, nargs='+', help=SUPPRESS)
     cli.add_argument('--capital', type=float, default=100000.0, help='Bots start with this available capital at '
                                                                            'the beginning of the tournament. ')
     cli.add_argument('--currency', type=str, default='USD', help='Currency of the capital in input.')
-    cli.add_argument('--days', type=int, default=30, help='Number of days the tournament runs for. It should be an')
+    cli.add_argument('--start', type=str, default=onemonthago, help='Approximate initial date of the bot-tournament. Format: '
+                                                             'YY-MM-DD`.')
+    cli.add_argument('--end', type=str, default=today, help='Approximate final date of the bot-tournament. Format: '
+                                                             'YY-MM-DD`.')
     args = cli.parse_args()
 
     if args.capital < 0:
         raise Exception("Capital must be a non-negative number.")
-    if args.days < 1:
-        raise Exception("Number of tournament days must be an integer greater than 0.")
+    if args.start >= args.end:
+        raise Exception("Start date must be before end date.")
 
     print('\nDownloading all available closing prices in the last year...')
     if args.symbols is None:
@@ -31,10 +38,14 @@ if __name__ == '__main__':
             args.symbols = my_file.readlines()[0].split(" ")
 
     # download data
-    data = download(args.symbols)
+    start_download = (dt.datetime.strptime(args.start, '%Y-%m-%d') - dt.timedelta(365)).strftime("%Y-%m-%d")
+    data = download(args.symbols, start=start_download, end=args.end)
     tickers = data["tickers"]
     price = data['price']
     logp = np.log(price)
+
+    # number of tournament days
+    num_days = int(np.sum(data['dates'] >= args.start))
 
     # convert currencies to most frequent one
     for i, curr in enumerate(data['currencies']):
@@ -46,40 +57,40 @@ if __name__ == '__main__':
     if args.currency == data['default_currency']:
         xrate = 1.0
     elif args.currency in data['exchange_rates']:
-        xrate = np.array(data['exchange_rates'][args.currency])[-args.days]
+        xrate = np.array(data['exchange_rates'][args.currency])[-num_days]
     else:
-        xrate = get_exchange_rates([args.currency], data['default_currency'], data['dates'])[args.currency][-args.days]
+        xrate = get_exchange_rates([args.currency], data['default_currency'], data['dates'],
+                                   start=args.start, end=args.end)[args.currency][-num_days]
     args.capital *= xrate
 
     # Volatile specifics
-    num_stocks, t = logp.shape
+    num_stocks, num_records = logp.shape
     order = 2
     horizon = 5
+    t = num_records - num_days
 
     # extract hierarchical info
     info = extract_hierarchical_info(data['sectors'], data['industries'])
     info['order_scale'] = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
+    info['tt'] = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+    tt_pred = ((1 + (np.arange(1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
 
     # tournament participants
     names = ["Adam", "Betty", "Chris", "Dany", "Eddy", "Flora"]
     tournament = {name: globals()[name](args.capital) for name in names}
 
     # initialize capitals
-    uninvested = np.zeros((len(names), args.days))
-    invested = np.zeros((len(names), args.days))
-    capitals = np.zeros((len(names), args.days))
+    uninvested = np.zeros((len(names), num_days))
+    invested = np.zeros((len(names), num_days))
+    capitals = np.zeros((len(names), num_days))
 
     str_format = "{:<11} {:<20} {:<20} {:<20} {:<60}"
     num_dashes = 110
     separator = num_dashes * "-"
 
     print("\n*** LET'S THE BOT-TOURNAMENT BEGINS! ***\n")
-    for j in range(args.days, 0, -1):
-        t = logp[:, :-j].shape[1]
-        info['tt'] = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
-        tt_pred = ((1 + (np.arange(1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
-
-        phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp[:, :-j], info)
+    for j in range(num_days, 0, -1):
+        phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp[:, -t - j:-j], info)
 
         logp_pred = np.dot(phi.numpy(), tt_pred)
         std_logp_pred = softplus(psi.numpy())
@@ -103,14 +114,14 @@ if __name__ == '__main__':
                   "{} {}".format(np.round(bot.uninvested / xrate, 2), args.currency),
                   "{} {}".format(np.round(bot.invested / xrate, 2), args.currency),
                   ' '.join(map(str, list(bot.portfolio.keys())[:10])) + ("..." if len(bot.portfolio.keys()) > 10 else "")))
-            capitals[i, args.days - j] = bot.capital / xrate
+            capitals[i, num_days - j] = bot.capital / xrate
         print(separator)
         print(separator)
 
     # plot capitals
     fig = plt.figure(figsize=(15, 8))
     plt.title("Capitals over time", fontsize=15)
-    plt.plot(data['dates'][-args.days:], capitals.T)
+    plt.plot(data['dates'][-num_days:], capitals.T)
     plt.legend(names, loc="upper left", fontsize=12)
     plt.xticks(rotation=45)
     plt.ylabel("capital in {}".format(args.currency))

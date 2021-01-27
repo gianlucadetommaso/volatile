@@ -6,10 +6,12 @@ import multitasking
 import json
 import csv
 import numpy as np
+import datetime as dt
+from typing import Union
 
 from tools import ProgressBar
 
-def download(tickers: list, interval: str = "1d", period: str = "1y") -> dict:
+def download(tickers: list, start: Union[str, int] = None, end: Union[str, int] = None, interval: str = "1d") -> dict:
     """
     Download historical data for tickers in the list.
 
@@ -17,10 +19,12 @@ def download(tickers: list, interval: str = "1d", period: str = "1y") -> dict:
     ----------
     tickers: list
         Tickers for which to download historical information.
+    start: str or int
+        Start download data from this date.
+    end: str or int
+        End download data at this date.
     interval: str
         Frequency between data.
-    period: str
-        Data period to download.
 
     Returns
     -------
@@ -49,8 +53,17 @@ def download(tickers: list, interval: str = "1d", period: str = "1y") -> dict:
     missing_si, na_si = {}, {}
     currencies = {}
 
+    if end is None:
+        end = int(dt.datetime.timestamp(dt.datetime.today()))
+    elif type(end) is str:
+        end = int(dt.datetime.timestamp(dt.datetime.strptime(end, '%Y-%m-%d')))
+    if start is None:
+        start = int(dt.datetime.timestamp(dt.datetime.today() - dt.timedelta(365)))
+    elif type(start) is str:
+        start = int(dt.datetime.timestamp(dt.datetime.strptime(start, '%Y-%m-%d')))
+
     @multitasking.task
-    def _download_one_threaded(ticker: str, interval: str = "1d", period: str = "1y"):
+    def _download_one_threaded(ticker: str, start: str, end: str, interval: str = "1d"):
         """
         Download historical data for a single ticker with multithreading. Plus, it scrapes missing stock information.
 
@@ -60,10 +73,12 @@ def download(tickers: list, interval: str = "1d", period: str = "1y") -> dict:
             Ticker for which to download historical information.
         interval: str
             Frequency between data.
-        period: str
-            Data period to download.
+        start: str
+            Start download data from this date.
+        end: str
+            End download data at this date.
         """
-        data_one = _download_one(ticker, interval, period)
+        data_one = _download_one(ticker, start, end, interval)
 
         try:
             data_one = data_one["chart"]["result"][0]
@@ -89,7 +104,7 @@ def download(tickers: list, interval: str = "1d", period: str = "1y") -> dict:
     progress = ProgressBar(len(tickers), 'completed')
 
     for ticker in tickers:
-        _download_one_threaded(ticker, interval, period)
+        _download_one_threaded(ticker, start, end, interval)
     multitasking.wait_for_tasks()
 
     progress.completed()
@@ -119,7 +134,7 @@ def download(tickers: list, interval: str = "1d", period: str = "1y") -> dict:
     currencies = [si[ticker]['CURRENCY'] if ticker in si else currencies[ticker] for ticker in tickers]
     ucurrencies, counts = np.unique(currencies, return_counts=True)
     default_currency = ucurrencies[np.argmax(counts)]
-    xrates = get_exchange_rates(currencies, default_currency, data.index, interval, period)
+    xrates = get_exchange_rates(currencies, default_currency, data.index, start, end, interval)
 
     return dict(tickers=tickers,
                 dates=pd.to_datetime(data.index),
@@ -131,7 +146,7 @@ def download(tickers: list, interval: str = "1d", period: str = "1y") -> dict:
                 sectors=[si[ticker]['SECTOR'] if ticker in si else "NA_" + ticker for ticker in tickers],
                 industries=[si[ticker]['INDUSTRY'] if ticker in si else "NA_" + ticker for ticker in tickers])
 
-def _download_one(ticker: str, interval: str = "1d", period: str = "1y") -> dict:
+def _download_one(ticker: str, start: int, end: int, interval: str = "1d") -> dict:
     """
     Download historical data for a single ticker.
 
@@ -139,10 +154,12 @@ def _download_one(ticker: str, interval: str = "1d", period: str = "1y") -> dict
     ----------
     ticker: str
         Ticker for which to download historical information.
+    start: int
+        Start download data from this timestamp date.
+    end: int
+        End download data at this timestamp date.
     interval: str
         Frequency between data.
-    period: str
-        Data period to download.
 
     Returns
     -------
@@ -151,7 +168,7 @@ def _download_one(ticker: str, interval: str = "1d", period: str = "1y") -> dict
     """
     base_url = 'https://query1.finance.yahoo.com'
 
-    params = dict(range=period, interval=interval.lower(), includePrePost=False)
+    params = dict(period1=start, period2=end, interval=interval.lower(), includePrePost=False)
 
     url = "{}/v8/finance/chart/{}".format(base_url, ticker)
     data = requests.get(url=url, params=params)
@@ -193,7 +210,8 @@ def _parse_quotes(data: dict, parse_volume: bool = True) -> pd.DataFrame:
 
     return quotes
 
-def get_exchange_rates(from_currencies: list, to_currency: str, dates: pd.Index, interval: str = "1d", period: str = "1y") -> dict:
+def get_exchange_rates(from_currencies: list, to_currency: str, dates: pd.Index, start: Union[str, int] = None,
+                       end: Union[str, int] = None, interval: str = "1d") -> dict:
     """
     It finds the most common currency and set it as default one. For any other currency, it downloads exchange rate
     closing prices to the default currency and return them as data frame.
@@ -206,22 +224,33 @@ def get_exchange_rates(from_currencies: list, to_currency: str, dates: pd.Index,
         Currency to convert to.
     dates: date
         Dates for which exchange rates should be available.
+    start: str or int
+        Start download data from this timestamp date.
+    end: str or int
+        End download data at this timestamp date.
     interval: str
         Frequency between data.
-    period: str
-        Data period to download.
 
     Returns
     -------
     xrates: dict
         A dictionary with currencies as keys and list of exchange rates at desired dates as values.
     """
+    if end is None:
+        end = int(dt.datetime.timestamp(dt.datetime.today()))
+    elif type(end) is str:
+        end = int(dt.datetime.timestamp(dt.datetime.strptime(end, '%Y-%m-%d')))
+    if start is None:
+        start = int(dt.datetime.timestamp(dt.datetime.today() - dt.timedelta(365)))
+    elif type(start) is str:
+        start = int(dt.datetime.timestamp(dt.datetime.strptime(start, '%Y-%m-%d')))
+
     ucurrencies, counts = np.unique(from_currencies, return_counts=True)
     tmp = {}
     if to_currency not in ucurrencies or len(ucurrencies) > 1:
         for curr in ucurrencies:
             if curr != to_currency:
-                tmp[curr] = _download_one(curr + to_currency + "=x", interval, period)
+                tmp[curr] = _download_one(curr + to_currency + "=x", start, end, interval)
                 tmp[curr] = _parse_quotes(tmp[curr]["chart"]["result"][0], parse_volume=False)["Adj Close"]
         tmp = pd.concat(tmp.values(), keys=tmp.keys(), axis=1, sort=True)
         xrates = pd.DataFrame(index=dates, columns=tmp.columns)
