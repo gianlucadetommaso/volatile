@@ -149,10 +149,11 @@ class Flora(Bot):
                 self.transact_capital(ticker, self.portfolio[ticker]['units'], info[ticker]['price'], type="sell")
 
         ## buy strategy
-        diff = min(30, len(info)) - len(self.portfolio)
-        q = np.sort([info[ticker]['slope'] for ticker in info])[-diff] if diff > 0 else np.inf
-        for ticker in info:
-            if ticker not in self.portfolio.keys() and info[ticker]['rate'] == "ALONG TREND" and info[ticker]['slope'] >= max(q, 1):
+        growths = np.array([info[ticker]['growth'] for ticker in info])
+        idx = np.argsort(growths)[::-1]
+        sorted_tickers = np.array(list(info.keys()))[idx]
+        for ticker in sorted_tickers:
+            if ticker not in self.portfolio.keys() and info[ticker]['rate'] == "ALONG TREND" and info[ticker]['growth'] >= 1:
                 units = int(np.minimum(self.uninvested, self.capital / 30) // info[ticker]['price'])
                 if units >= 1:
                     self.transact_capital(ticker, units, info[ticker]['price'], type="buy")

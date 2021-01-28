@@ -96,9 +96,9 @@ if __name__ == '__main__':
         std_logp_pred = softplus(psi.numpy())
         scores = (logp_pred[:, horizon] - logp[:, -j - 1]) / std_logp_pred.squeeze()
         rates = rate(scores)
-        slope = np.dot(phi.numpy()[:, 1:], np.arange(1, order + 1))
+        growth = np.dot(phi.numpy()[:, 1:], np.arange(1, order + 1))
 
-        bot_info = {tickers[i]: {"price": price[i, -j - 1], "rate": rates[i], "slope": slope[i]} for i in range(num_stocks)}
+        bot_info = {tickers[i]: {"price": price[i, -j - 1], "rate": rates[i], "growth": growth[i]} for i in range(num_stocks)}
         next_price = {tickers[i]: price[i, -j] for i in range(num_stocks)}
 
         print()

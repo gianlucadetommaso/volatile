@@ -187,8 +187,8 @@ if __name__ == '__main__':
     cli.add_argument('-s', '--symbols', type=str, nargs='+', help=SUPPRESS)
     cli.add_argument('--rank', type=str, default="rate",
                      help="If `rate`, stocks are ranked in the prediction table and in the stock estimation plot from "
-                          "the highest below to the highest above trend; if `slope`, ranking is done from the largest"
-                          " to the smallest trend slope at the last date.")
+                          "the highest below to the highest above trend; if `growth`, ranking is done from the largest"
+                          " to the smallest trend growth at the last date.")
     cli.add_argument('--save-table', action='store_true',
                      help='Save prediction table in csv format.')
     cli.add_argument('--no-plots', action='store_true',
@@ -197,8 +197,8 @@ if __name__ == '__main__':
                      help='Plot loss function decay over training iterations.')
     args = cli.parse_args()
 
-    if args.rank.lower() not in ["rate", "slope"]:
-        raise Exception("{} not recognized. Please provide one between `rate` and `slope`.".format(args.rank))
+    if args.rank.lower() not in ["rate", "growth"]:
+        raise Exception("{} not recognized. Please provide one between `rate` and `growth`.".format(args.rank))
 
     today = dt.date.today().strftime("%Y-%m-%d")
 
@@ -256,8 +256,8 @@ if __name__ == '__main__':
 
     # compute score
     scores = (logp_pred[:, horizon] - logp[:, -1]) / std_logp_pred.squeeze()
-    # compute slope
-    slope = np.dot(phi.numpy()[:, 1:], np.arange(1, order + 1))
+    # compute growth as percentage price variation
+    growth = np.dot(phi.numpy()[:, 1:], np.arange(1, order + 1)) / t
 
     # convert log-price currencies back (standard deviations of log-prices stay the same)
     for i, curr in enumerate(data['currencies']):
@@ -283,14 +283,14 @@ if __name__ == '__main__':
     std_p_mkt_est = np.sqrt(np.exp(2 * logp_mkt_est + std_logp_mkt_est ** 2) * (np.exp(std_logp_mkt_est ** 2) - 1))
 
     # rank according to score
-    rank = np.argsort(scores)[::-1] if args.rank == "rate" else np.argsort(slope)[::-1]
+    rank = np.argsort(scores)[::-1] if args.rank == "rate" else np.argsort(growth)[::-1]
     ranked_tickers = np.array(tickers)[rank]
     ranked_scores = scores[rank]
     ranked_p = data['price'][rank]
     ranked_p_est = p_est[rank]
     ranked_std_p_est = std_p_est[rank]
     ranked_currencies = np.array(data['currencies'])[rank]
-    ranked_slope = slope[rank]
+    ranked_growth = growth[rank]
 
     # rate stockes
     ranked_rates = rate(ranked_scores)
@@ -399,20 +399,23 @@ if __name__ == '__main__':
         print('Industry estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
 
         # determine which stocks are along trend to avoid plotting them
-        along_trend = np.where(np.array(ranked_rates) == "ALONG TREND")[0]
-        num_out_trend = num_stocks - len(along_trend)
+        if args.rank == "rate":
+            dont_plot = np.where(np.array(ranked_rates) == "ALONG TREND")[0]
+        else:
+            dont_plot = np.where(np.array(ranked_rates) != "ALONG TREND")[0]
+        num_to_plot = num_stocks - len(dont_plot)
 
-        if num_out_trend > 0:
+        if num_to_plot > 0:
             print('\nPlotting stock estimation...')
             ranked_left_est = np.maximum(0, ranked_p_est - 2 * ranked_std_p_est)
             ranked_right_est = ranked_p_est + 2 * ranked_std_p_est
 
             j = 0
-            fig = plt.figure(figsize=(20, max(num_out_trend, 5)))
+            fig = plt.figure(figsize=(20, max(num_to_plot, 5)))
             for i in range(num_stocks):
-                if i not in along_trend:
+                if i not in dont_plot:
                     j += 1
-                    plt.subplot(int(np.ceil(num_out_trend / num_columns)), num_columns, j)
+                    plt.subplot(int(np.ceil(num_to_plot / num_columns)), num_columns, j)
                     plt.title(ranked_tickers[i], fontsize=15)
                     l1 = plt.plot(data["dates"], ranked_p[i], label="price in {}".format(ranked_currencies[i]))
                     l2 = plt.plot(data["dates"], ranked_p_est[i], label="trend")
@@ -439,15 +442,15 @@ if __name__ == '__main__':
     ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["industries"])[rank]]
 
     strf = "{:<15} {:<26} {:<42} {:<24} {:<22} {:<5}"
-    num_dashes = 139
+    num_dashes = 141
     separator = num_dashes * "-"
     print(num_dashes * "-")
-    print(strf.format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATE", "SLOPE"))
+    print(strf.format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATE", "GROWTH"))
     print(separator)
     for i in range(num_stocks):
         print(strf.format(ranked_tickers[i], ranked_sectors[i], ranked_industries[i],
                           "{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]), ranked_rates[i],
-                          "{}{}".format("+" if ranked_slope[i] >= 0 else "", np.round(ranked_slope[i], 2))))
+                          "{}{}{}".format("+" if ranked_growth[i] >= 0 else "", np.round(100 * ranked_growth[i], 2), '%')))
         print(separator)
         if i < num_stocks - 1 and ranked_rates[i] != ranked_rates[i + 1]:
             print(separator)
@@ -459,7 +462,7 @@ if __name__ == '__main__':
                     ['INDUSTRY'] + ranked_industries,
                     ["LAST AVAILABLE PRICE"] + ["{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]) for i in range(num_stocks)],
                     ["RATE"] + ranked_rates,
-                    ["SLOPE"] + ranked_rates)
+                    ["GROWTH"] + ranked_growth / t)
         with open(tab_name, 'w') as file:
             wr = csv.writer(file)
             for row in table:
