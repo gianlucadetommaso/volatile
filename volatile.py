@@ -147,6 +147,42 @@ def softplus(x: np.array) -> np.array:
     """
     return np.log(1 + np.exp(x))
 
+def estimate_logprice_statistics(phi: np.array, psi: np.array, tt: np.array) -> tuple:
+    """
+    It estimates mean and standard deviations of log-prices.
+
+    Parameters
+    ----------
+    phi: np.array
+        Parameters of regression polynomial.
+    psi: np.array
+        Parameters of standard deviation.
+    tt: np.array
+        Sequence of times to evaluate statistics at.
+
+    Returns
+    -------
+    It returns a tuple of mean and standard deviation log-price estimators.
+    """
+    return np.dot(phi, tt), softplus(psi)
+
+def estimate_price_statistics(mu: np.array, sigma: np.array):
+    """
+    It estimates mean and standard deviations of prices.
+
+    Parameters
+    ----------
+    mu: np.array
+        Mean estimates of log-prices.
+    sigma: np.array
+        Standard deviation estimates of log-prices.
+
+    Returns
+    -------
+    It returns a tuple of mean and standard deviation price estimators.
+    """
+    return np.exp(mu + sigma ** 2 / 2), np.sqrt(np.exp(2 * mu + sigma ** 2) * (np.exp(sigma ** 2) - 1))
+
 def rate(scores: np.array, thresholds: dict = None) -> list:
     """
     Rate scores according to `thresholds`. Possible rates are `HIGHLY BELOW TREND`, `BELOW TREND`, `ALONG TREND`,
@@ -236,21 +272,16 @@ if __name__ == '__main__':
 
     ## log-price statistics (Normal distribution)
     # calculate stock-level estimators of log-prices
-    logp_est = np.dot(phi.numpy(), info['tt'])
-    std_logp_est = softplus(psi.numpy())
+    logp_est, std_logp_est = estimate_logprice_statistics(phi.numpy(), psi.numpy(), info['tt'])
     # calculate stock-level predictions of log-prices
     tt_pred = ((1 + (np.arange(1 + horizon) / t)) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
-    logp_pred = np.dot(phi.numpy(), tt_pred)
-    std_logp_pred = softplus(psi.numpy())
+    logp_pred, std_logp_pred = estimate_logprice_statistics(phi.numpy(), psi.numpy(), tt_pred)
     # calculate industry-level estimators of log-prices
-    logp_ind_est = np.dot(phi_i.numpy(), info['tt'])
-    std_logp_ind_est = softplus(psi_i.numpy())
+    logp_ind_est, std_logp_ind_est = estimate_logprice_statistics(phi_i.numpy(), psi_i.numpy(), info['tt'])
     # calculate sector-level estimators of log-prices
-    logp_sec_est = np.dot(phi_s.numpy(), info['tt'])
-    std_logp_sec_est = softplus(psi_s.numpy())
+    logp_sec_est, std_logp_sec_est = estimate_logprice_statistics(phi_s.numpy(), psi_s.numpy(), info['tt'])
     # calculate market-level estimators of log-prices
-    logp_mkt_est = np.dot(phi_m.numpy(), info['tt'])
-    std_logp_mkt_est = softplus(psi_m.numpy())
+    logp_mkt_est, std_logp_mkt_est = estimate_logprice_statistics(phi_m.numpy(), psi_m.numpy(), info['tt'])
 
     print("Training completed.")
 
@@ -267,20 +298,15 @@ if __name__ == '__main__':
 
     ## price statistics (log-Normal distribution)
     # calculate stock-level estimators of prices
-    p_est = np.exp(logp_est + std_logp_est ** 2 / 2)
-    std_p_est = np.sqrt(np.exp(2 * logp_est + std_logp_est ** 2) * (np.exp(std_logp_est ** 2) - 1))
+    p_est, std_p_est = estimate_price_statistics(logp_est, std_logp_est)
     # calculate stock-level prediction of prices
-    p_pred = np.exp(logp_pred + std_logp_pred ** 2 / 2)
-    std_p_pred = np.sqrt(np.exp(2 * logp_pred + std_logp_pred ** 2) * (np.exp(std_logp_pred ** 2) - 1))
+    p_pred, std_p_pred = estimate_price_statistics(logp_pred, std_logp_pred)
     # calculate industry-level estimators of prices
-    p_ind_est = np.exp(logp_ind_est + std_logp_ind_est ** 2 / 2)
-    std_p_ind_est = np.sqrt(np.exp(2 * logp_ind_est + std_logp_ind_est ** 2) * (np.exp(std_logp_ind_est ** 2) - 1))
+    p_ind_est, std_p_ind_est = estimate_price_statistics(logp_ind_est, std_logp_ind_est)
     # calculate sector-level estimators of prices
-    p_sec_est = np.exp(logp_sec_est + std_logp_sec_est ** 2 / 2)
-    std_p_sec_est = np.sqrt(np.exp(2 * logp_sec_est + std_logp_sec_est ** 2) * (np.exp(std_logp_sec_est ** 2) - 1))
+    p_sec_est, std_p_sec_est = estimate_price_statistics(logp_sec_est, std_logp_sec_est)
     # calculate market-level estimators of prices
-    p_mkt_est = np.exp(logp_mkt_est + std_logp_mkt_est ** 2 / 2)
-    std_p_mkt_est = np.sqrt(np.exp(2 * logp_mkt_est + std_logp_mkt_est ** 2) * (np.exp(std_logp_mkt_est ** 2) - 1))
+    p_mkt_est, std_p_mkt_est = estimate_price_statistics(logp_mkt_est, std_logp_mkt_est)
 
     # rank according to score
     rank = np.argsort(scores)[::-1] if args.rank == "rate" else np.argsort(growth)[::-1]
