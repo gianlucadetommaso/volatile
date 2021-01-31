@@ -33,8 +33,8 @@ def download(tickers: list, start: Union[str, int] = None, end: Union[str, int] 
         - tickers: list of tickers
         - logp: array of log-adjusted closing prices, shape=(num stocks, length period);
         - volume: array of volumes, shape=(num stocks, length period);
-        - sectors: list of stock sectors;
-        - industries: list stock industries.
+        - sectors: dictionary of stock sector for each ticker;
+        - industries: dictionary of stock industry for each ticker.
     """
     tickers = tickers if isinstance(tickers, (list, set, tuple)) else tickers.replace(',', ' ').split()
     tickers = list(set([ticker.upper() for ticker in tickers]))
@@ -143,8 +143,8 @@ def download(tickers: list, start: Union[str, int] = None, end: Union[str, int] 
                 currencies=currencies,
                 exchange_rates=xrates,
                 default_currency=default_currency,
-                sectors=[si[ticker]['SECTOR'] if ticker in si else "NA_" + ticker for ticker in tickers],
-                industries=[si[ticker]['INDUSTRY'] if ticker in si else "NA_" + ticker for ticker in tickers])
+                sectors={ticker: si[ticker]['SECTOR'] if ticker in si else "NA_" + ticker for ticker in tickers},
+                industries={ticker: si[ticker]['INDUSTRY'] if ticker in si else "NA_" + ticker for ticker in tickers})
 
 def _download_one(ticker: str, start: int, end: int, interval: str = "1d") -> dict:
     """

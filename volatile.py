@@ -317,6 +317,7 @@ if __name__ == '__main__':
     ranked_std_p_est = std_p_est[rank]
     ranked_currencies = np.array(data['currencies'])[rank]
     ranked_growth = growth[rank]
+    ranked_volume = data["volume"][rank]
 
     # rate stockes
     ranked_rates = rate(ranked_scores)
@@ -324,23 +325,12 @@ if __name__ == '__main__':
     if not args.no_plots:
         ## information for plotting
         # find unique names of sectors
-        usectors = np.unique(data['sectors'])
-        num_sectors = len(usectors)
         # determine which sectors were not available to avoid plotting
-        NA_sectors = np.where(np.array([sec[:2] for sec in usectors]) == "NA")[0]
+        NA_sectors = np.where(np.array([sec[:2] for sec in info['unique_sectors']]) == "NA")[0]
         num_NA_sectors = len(NA_sectors)
-        # provide sector IDs at stock-level
-        sectors_id = [np.where(usectors == sector)[0][0] for sector in data['sectors']]
-        # find unique names of industries and store indices
-        uindustries = np.unique(data['industries'])
-        num_industries = len(uindustries)
         # determine which industries were not available to avoid plotting
-        NA_industries = np.where(np.array([ind[:2] for ind in uindustries]) == "NA")[0]
+        NA_industries = np.where(np.array([ind[:2] for ind in info['unique_industries']]) == "NA")[0]
         num_NA_industries = len(NA_industries)
-        # provide industry IDs at stock-level
-        industries_id = [np.where(uindustries == industry)[0][0] for industry in data['industries']]
-        # ranked volume at stock-level
-        ranked_volume = data["volume"][rank]
 
         print('\nPlotting market estimation...')
         fig = plt.figure(figsize=(10,3))
@@ -367,14 +357,14 @@ if __name__ == '__main__':
         print('\nPlotting sector estimation...')
         left_sec_est = np.maximum(0, p_sec_est - 2 * std_p_sec_est)
         right_sec_est = p_sec_est + 2 * std_p_sec_est
-        fig = plt.figure(figsize=(20, max(num_sectors - num_NA_sectors, 5)))
+        fig = plt.figure(figsize=(20, max(info['num_sectors'] - num_NA_sectors, 5)))
         j = 0
-        for i in range(num_sectors):
+        for i in range(info['num_sectors']):
             if i not in NA_sectors:
                 j += 1
-                plt.subplot(int(np.ceil((num_sectors - num_NA_sectors) / num_columns)), num_columns, j)
-                plt.title(usectors[i], fontsize=15)
-                idx_sectors = np.where(np.array(sectors_id) == i)[0]
+                plt.subplot(int(np.ceil((info['num_sectors'] - num_NA_sectors) / num_columns)), num_columns, j)
+                plt.title(info['unique_sectors'][i], fontsize=15)
+                idx_sectors = np.where(np.array(info['sectors_id']) == i)[0]
                 l1 = plt.plot(data["dates"], np.exp(logp[idx_sectors].reshape(-1, t).mean(0)),
                               label="avg. price in {}".format(data['default_currency']), color="C0")
                 l2 = plt.plot(data["dates"], p_sec_est[i], label="trend", color="C1")
@@ -382,7 +372,7 @@ if __name__ == '__main__':
                 plt.ylabel("avg. price in {}".format(data['default_currency']), fontsize=12)
                 plt.xticks(rotation=45)
                 plt.twinx()
-                l4 = plt.bar(data["dates"], data['volume'][np.where(np.array(sectors_id) == i)[0]].reshape(-1, t).mean(0),
+                l4 = plt.bar(data["dates"], data['volume'][np.where(np.array(info['sectors_id']) == i)[0]].reshape(-1, t).mean(0),
                              width=1, color='g', alpha=0.2, label='avg. volume')
                 plt.ylabel("avg. volume", fontsize=12)
                 ll = l1 + l2 + [l3] + [l4]
@@ -397,15 +387,15 @@ if __name__ == '__main__':
         print('\nPlotting industry estimation...')
         left_ind_est = np.maximum(0, p_ind_est - 2 * std_p_ind_est)
         right_ind_est = p_ind_est + 2 * std_p_ind_est
-        fig = plt.figure(figsize=(20, max(num_industries - num_NA_industries, 5)))
+        fig = plt.figure(figsize=(20, max(info['num_industries'] - num_NA_industries, 5)))
         j = 0
-        for i in range(num_industries):
+        for i in range(info['num_industries']):
             if i not in NA_industries:
                 j += 1
-                plt.subplot(int(np.ceil((num_industries - num_NA_industries) / num_columns)), num_columns, j)
-                plt.title(uindustries[i], fontsize=15)
-                idx_industries = np.where(np.array(industries_id) == i)[0]
-                plt.title(uindustries[i], fontsize=15)
+                plt.subplot(int(np.ceil((info['num_industries'] - num_NA_industries) / num_columns)), num_columns, j)
+                plt.title(info['unique_industries'][i], fontsize=15)
+                idx_industries = np.where(np.array(info['industries_id']) == i)[0]
+                plt.title(info['unique_industries'][i], fontsize=15)
                 l1 = plt.plot(data["dates"], np.exp(logp[idx_industries].reshape(-1, t).mean(0)),
                               label="avg. price in {}".format(data['default_currency']), color="C0")
                 l2 = plt.plot(data["dates"], p_ind_est[i], label="trend", color="C1")
@@ -413,7 +403,7 @@ if __name__ == '__main__':
                 plt.ylabel("avg. price in {}".format(data['default_currency']), fontsize=12)
                 plt.xticks(rotation=45)
                 plt.twinx()
-                l4 = plt.bar(data["dates"], data['volume'][np.where(np.array(industries_id) == i)[0]].reshape(-1, t).mean(0),
+                l4 = plt.bar(data["dates"], data['volume'][np.where(np.array(info['industries_id']) == i)[0]].reshape(-1, t).mean(0),
                              width=1, color='g', alpha=0.2, label='avg. volume')
                 plt.ylabel("avg. volume", fontsize=12)
                 ll = l1 + l2 + [l3] + [l4]
@@ -464,8 +454,8 @@ if __name__ == '__main__':
             os.remove('stock_estimation.png')
 
     print("\nPREDICTION TABLE")
-    ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["sectors"])[rank]]
-    ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(data["industries"])[rank]]
+    ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(list(data["sectors"].values()))[rank]]
+    ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(list(data["industries"].values()))[rank]]
 
     strf = "{:<15} {:<26} {:<42} {:<24} {:<22} {:<5}"
     num_dashes = 141

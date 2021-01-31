@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 import os
 import datetime as dt
 
-from tools import convert_currency, extract_hierarchical_info
+from tools import convert_currency, extract_hierarchical_info, compute_risk
 
 from download import download, get_exchange_rates
-from volatile import softplus, train, rate
+from volatile import softplus, train, rate, estimate_logprice_statistics, estimate_price_statistics
 from bots import *
 
 if __name__ == '__main__':
@@ -83,38 +83,60 @@ if __name__ == '__main__':
     uninvested = np.zeros((len(names), num_days))
     invested = np.zeros((len(names), num_days))
     capitals = np.zeros((len(names), num_days))
+    risks = np.zeros((len(names), num_days))
 
-    str_format = "{:<11} {:<20} {:<20} {:<20} {:<60}"
-    num_dashes = 110
+    str_format = "{:<11} {:<20} {:<20} {:<20} {:<60} {:<20}"
+    num_dashes = 143
     separator = num_dashes * "-"
 
     print("\n*** LET'S THE BOT-TOURNAMENT BEGINS! ***\n")
     for j in range(num_days, 0, -1):
         phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp[:, -t - j:-j], info)
 
-        logp_pred = np.dot(phi.numpy(), tt_pred)
-        std_logp_pred = softplus(psi.numpy())
+        logp_est, std_logp_est = estimate_logprice_statistics(phi.numpy(), psi.numpy(), info['tt'])
+        logp_pred, std_logp_pred = estimate_logprice_statistics(phi.numpy(), psi.numpy(), tt_pred)
+        logp_ind_est, std_logp_ind_est = estimate_logprice_statistics(phi_i.numpy(), psi_i.numpy(), info['tt'])
+        logp_sec_est, std_logp_sec_est = estimate_logprice_statistics(phi_s.numpy(), psi_s.numpy(), info['tt'])
+        logp_mkt_est, std_logp_mkt_est = estimate_logprice_statistics(phi_m.numpy(), psi_m.numpy(), info['tt'])
+
+        p_est, std_p_est = estimate_price_statistics(logp_est, std_logp_est)
+        p_ind_est, std_p_ind_est = estimate_price_statistics(logp_ind_est, std_logp_ind_est)
+        p_sec_est, std_p_sec_est = estimate_price_statistics(logp_sec_est, std_logp_sec_est)
+        p_mkt_est, std_p_mkt_est = estimate_price_statistics(logp_mkt_est, std_logp_mkt_est)
+
+        variances = {}
+        for i, ticker in enumerate(tickers):
+            variances[ticker] = {"stock": std_p_est[i, -1] ** 2,
+                                 "industry": std_p_ind_est[info['industries_id'][i], -1] ** 2,
+                                 "sector": std_p_sec_est[info['sectors_id'][i], -1] ** 2,
+                                 "market": std_p_mkt_est[0, -1] ** 2}
+
         scores = (logp_pred[:, horizon] - logp[:, -j - 1]) / std_logp_pred.squeeze()
         rates = rate(scores)
         growth = np.dot(phi.numpy()[:, 1:], np.arange(1, order + 1))
 
-        bot_info = {tickers[i]: {"price": price[i, -j - 1], "rate": rates[i], "growth": growth[i]} for i in range(num_stocks)}
+        bot_info = {tickers[i]: {"price": price[i, -j - 1], "rate": rates[i], "growth": growth[i], "scores": scores[i]} for i in range(num_stocks)}
         next_price = {tickers[i]: price[i, -j] for i in range(num_stocks)}
 
         print()
         print("DATE:", data['dates'].date[-j].strftime("%Y-%m-%d"))
         print(separator)
-        print(str_format.format("BOT", "CAPITAL", "UNINVESTED", "INVESTED", "OWNED"))
+        print(str_format.format("BOT", "CAPITAL", "UNINVESTED", "INVESTED", "OWNED", "RISK"))
         print(separator)
         for i, (name, bot) in enumerate(tournament.items()):
             bot.trade(bot_info)
             bot.compute_capital(next_price)
+
+            risks[i, num_days - j] = compute_risk(bot.portfolio, variances, data['sectors'], data['industries'])
+            capitals[i, num_days - j] = bot.capital / xrate
+
             print(str_format.format(name,
                   "{} {}".format(np.round(bot.capital / xrate, 2), args.currency),
                   "{} {}".format(np.round(bot.uninvested / xrate, 2), args.currency),
                   "{} {}".format(np.round(bot.invested / xrate, 2), args.currency),
-                  ' '.join(map(str, list(bot.portfolio.keys())[:10])) + ("..." if len(bot.portfolio.keys()) > 10 else "")))
-            capitals[i, num_days - j] = bot.capital / xrate
+                  ' '.join(map(str, list(bot.portfolio.keys())[:10])) + ("..." if len(bot.portfolio.keys()) > 10 else ""),
+                  np.round(risks[i, num_days - j], 2)))
+
         print(separator)
         print(separator)
 
@@ -128,3 +150,13 @@ if __name__ == '__main__':
     fig_name = 'tournament_capitals.png'
     fig.savefig(fig_name, dpi=fig.dpi)
     print('Plot of capitals over time has been saved in {}/{}.'.format(os.getcwd(), fig_name))
+
+    fig = plt.figure(figsize=(15, 8))
+    plt.title("Portfolio risk over time", fontsize=15)
+    plt.plot(data['dates'][-num_days:], risks.T)
+    plt.legend(names, loc="upper left", fontsize=12)
+    plt.xticks(rotation=45)
+    plt.ylabel("risk")
+    fig_name = 'tournament_risks.png'
+    fig.savefig(fig_name, dpi=fig.dpi)
+    print('Plot of portfolio risk over time has been saved in {}/{}.'.format(os.getcwd(), fig_name))

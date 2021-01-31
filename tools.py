@@ -78,16 +78,16 @@ class ProgressBar:
     def __str__(self):
         return str(self.prog_bar)
 
-def extract_hierarchical_info(sectors: list, industries: list) -> dict:
+def extract_hierarchical_info(sectors: dict, industries: dict) -> dict:
     """
     Extract information about sectors and industries useful to construct the probabilistic model.
 
     Parameters
     ----------
-    sectors: list
-        List of sectors at stock-level.
-    industries: list
-        List of industries at stock-level.
+    sectors: dict
+        Dict of sectors at stock-level.
+    industries: dict
+        Dict of industries at stock-level.
 
     Returns
     -------
@@ -96,21 +96,63 @@ def extract_hierarchical_info(sectors: list, industries: list) -> dict:
     - num_industries: number of unique industries;
     - sectors_id: a list of indices at stock-level, corresponding to the sector they belong to;
     - industries_id: a list of indices at stock-level, corresponding to the industries they belong to;
-    - sector_industries_id; a list of indices at industry-level, corresponding to the sectors they belong to.
+    - sector_industries_id; a list of indices at industry-level, corresponding to the sectors they belong to;
+    - unique_sectors: array of unique sector names;
+    - unique_industries: array of unique industry names.
     """
     # find unique names of sectors
-    usectors = np.unique(sectors)
+    usectors = np.unique(list(sectors.values()))
     num_sectors = len(usectors)
     # provide sector IDs at stock-level
-    sectors_id = [np.where(usectors == sector)[0][0] for sector in sectors]
+    sectors_id = [np.where(usectors == sector)[0][0] for sector in sectors.values()]
     # find unique names of industries and store indices
-    uindustries, industries_idx = np.unique(industries, return_index=True)
+    uindustries, industries_idx = np.unique(list(industries.values()), return_index=True)
     num_industries = len(uindustries)
     # provide industry IDs at stock-level
-    industries_id = [np.where(uindustries == industry)[0][0] for industry in industries]
+    industries_id = [np.where(uindustries == industry)[0][0] for industry in industries.values()]
     # provide sector IDs at industry-level
     sector_industries_id = np.array(sectors_id)[industries_idx].tolist()
 
     # place relevant information in dictionary
     return dict(num_sectors=num_sectors, num_industries=num_industries, industries_id=industries_id,
-                sectors_id=sectors_id, sector_industries_id=sector_industries_id)
+                sectors_id=sectors_id, sector_industries_id=sector_industries_id, unique_sectors = usectors,
+                unique_industries=uindustries)
+
+def compute_risk(portfolio: dict, variances: dict, sectors: dict, industries: dict):
+    """
+    It computes a portfolio risk measure.
+
+    Parameters
+    ----------
+    portfolio: dict
+        A dictionary with tickers as keys and another dictionary as values. The latter must include the following pairs:
+        - "units": number of owned units of the corresponding stock.
+    variances: dict
+        A dictionary with tickers as keys and another dictionary as values. The latter must include the following pairs:
+        - "stock": variance at stock level;
+        - "industry": variance at industry level;
+        - "sector": variance at sector level;
+        - "market: variance at market level.
+    sectors:
+        A dictionary of tickers as keys and corresponding sectors as values.
+    industries:
+        A dictionary of tickers as keys and corresponding industries as values.
+
+    Returns
+    -------
+    risk: float
+        A positive number indicating the computed risk of the portfolio.
+    """
+    risk = 0
+    for t1 in portfolio:
+        for t2 in portfolio:
+            tmp = variances[t1]['market']
+            if t1 == t2:
+                tmp += variances[t1]['stock']
+            if industries[t1] == industries[t2]:
+                tmp += variances[t1]['industry']
+                if sectors[t1] == sectors[t2]:
+                    tmp += variances[t1]['sector']
+            risk += portfolio[t1]['units'] * portfolio[t2]['units'] * tmp
+    return np.sqrt(risk) / max(len(portfolio), 1)
+
