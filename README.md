@@ -32,7 +32,7 @@ For each symbol, the table tells you its sector and industry, then the last avai
 
 By default, symbols appear in the table ranked from the furthest below to the furthest above their respective trends; alternatively, you can rank according to the growth indicator, from largest to smallest, by adding the following flag to the command above: `--rank growth`.  The prediction table can be saved in the current directory as `prediction_table.csv`  using the flag `--save-table`.
 
-In the current directory, several estimation plots will appear. `stock_estimation.png` is a visualisation of stock prices and their estimations over the last year, together with a notion of uncertainty and daily trading volume. By default, only stocks rated either above or below their trends will be plotted, ranked as in the prediction table. If, instead, you have used the flag `--rank growth`, only stocks ALONG TREND will be plotted, accordingly ranked. 
+In the current directory, several estimation plots will appear. `stock_estimation.png` is a visualisation of stock prices and their estimations over the last year, together with a notion of uncertainty and daily trading volume. By default, only stocks rated either above or below their trends will be plotted, ranked as in the prediction table. If, instead, you have used the flag `--rank growth`, only the top growing 100 stocks ALONG TREND will be plotted, accordingly ranked. 
 
 Notice how the estimation crucially attempts to reproduce the trend of a stock but not to learn its noise. The uncertainty, on the other hand, depends on the stock volatility; the smaller the volatility, the more confident we are about our estimates, the more a sudden shift from the trend will be regarded as significant. You can use this plot as a sanity check that the estimation procedure agrees with your intuition. Make sure to glance at it before any transaction.
 
@@ -59,14 +59,14 @@ By default, the tournament runs over the last month. However, you can change app
 
 While the tournament is running, you will be able to see its current state parsed in your shell. For example:
 
-<img width="1012" alt="Screenshot 2021-01-31 at 20 09 13" src="https://user-images.githubusercontent.com/32386694/106395074-22187700-63f8-11eb-877e-923b3525c995.png">
+<img width="1013" alt="Screenshot 2021-02-01 at 19 57 11" src="https://user-images.githubusercontent.com/32386694/106504791-54d97280-64bf-11eb-8acc-4675eeb2d3e1.png">
 
 For every day of the tournament and each bot, you can see its total capital, how much of it is invested and uninvested, a list of stock the bot owns and a portfolio risk measure (see technical section). When the tournament is over, plots of capitals and risks over time like the following ones are respectively saved in the current directory as `tournament_capitals.png` and `tournament_risks.png`.
 
-<img width="1177" alt="Screenshot 2021-01-31 at 21 53 39" src="https://user-images.githubusercontent.com/32386694/106397659-732f6780-6406-11eb-9f77-0d0aa55245ae.png">
-<img width="1183" alt="Screenshot 2021-01-31 at 20 12 41" src="https://user-images.githubusercontent.com/32386694/106395113-61df5e80-63f8-11eb-9a62-7d2855ff8003.png">
+<img width="1154" alt="Screenshot 2021-02-01 at 19 48 58" src="https://user-images.githubusercontent.com/32386694/106504137-75ed9380-64be-11eb-8087-f1ce5d694468.png">
+<img width="1141" alt="Screenshot 2021-02-01 at 19 49 12" src="https://user-images.githubusercontent.com/32386694/106504140-771ec080-64be-11eb-9229-75076744b3bc.png">
 
-In this case, Betty notably leads the way, however her risk score is significantly higher than the one for the other bots.
+In this case, Betty and Eddy lead the way, but they also own the most risky portfolios.
 
 ### How to install
 The easiest way to use Volatile is to:
@@ -152,7 +152,7 @@ where <a href="https://www.codecogs.com/eqnedit.php?latex=\text{Std}" target="_b
 
 where <a href="https://www.codecogs.com/eqnedit.php?latex=\delta_{i,j}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\delta_{i,j}" title="\delta_{i,j}" /></a> denotes a Kronecker delta and <a href="https://www.codecogs.com/eqnedit.php?latex=\hat{\nu}_{T,i},&space;\hat{\nu}_{T,\ell}^\iota,&space;\hat{\nu}_{T,k}^s,&space;\hat{\nu}_T^m" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat{\nu}_{T,i},&space;\hat{\nu}_{T,\ell}^\iota,&space;\hat{\nu}_{T,k}^s,&space;\hat{\nu}_T^m" title="\hat{\nu}_{T,i}, \hat{\nu}_{T,\ell}^\iota, \hat{\nu}_{T,k}^s, \hat{\nu}_T^m" /></a> are price standard deviation estimators at stock, industry, sector and market levels. Although the covariance approximation above does not exactly correspond to the model in use, it is useful to associate higher risk to stocks with higher volatility and to increase the risk if multiple stocks in the portfolio belong to the same category. 
 
-Notice that because standard deviations are multiplied by the number of owned units and because higher prices usually tend to have higher standard deviations, a larger invested capital is prone to be associated with a higher risk. Furthermore, we divide by the number of stocks in the portfolio to promote diversification as a way to lower risk. 
+Notice that because standard deviations are multiplied by the number of owned units and because higher prices usually tend to have higher standard deviations, a larger invested capital is prone to be associated with a higher risk. Furthermore, we divide by the number of stocks in the portfolio to promote diversification as a way to promote lower risk. 
 
 ### Bots description
 Meet the participants of the bot-tournament! Remember: you can run the tournament via `python tournament.py`.

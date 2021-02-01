@@ -183,35 +183,36 @@ def estimate_price_statistics(mu: np.array, sigma: np.array):
     """
     return np.exp(mu + sigma ** 2 / 2), np.sqrt(np.exp(2 * mu + sigma ** 2) * (np.exp(sigma ** 2) - 1))
 
-def rate(scores: np.array, thresholds: dict = None) -> list:
+def rate(scores: np.array, lower_bounds: dict = None) -> list:
     """
-    Rate scores according to `thresholds`. Possible rates are `HIGHLY BELOW TREND`, `BELOW TREND`, `ALONG TREND`,
+    Rate scores according to `lower_bounds`. Possible rates are `HIGHLY BELOW TREND`, `BELOW TREND`, `ALONG TREND`,
     `ABOVE TREND` and `HIGHLY ABOVE TREND`.
 
     Parameters
     ----------
     scores: np.array
         An array of scores for each stock.
-    thresholds: dict
-        It has for keys the possible rates and for values the corresponding thresholds.
+    lower_bounds: dict
+        It has for keys possible rates and for values corresponding lower-bound lower_bounds, meaning that for a
+        stock to be given a certain rate it needs to have score above its lower bound and below higher lower bounds of
+        other rates.
 
     Returns
     -------
     rates: list
         List of rates for each stock.
     """
-    if thresholds is None:
-        thresholds = {"HIGHLY BELOW TREND": 3, "BELOW TREND": 2, "ALONG TREND": 0, "ABOVE TREND": -2,
-                      "HIGHLY ABOVE TREND": -3}
+    if lower_bounds is None:
+        lower_bounds = {"HIGHLY BELOW TREND": 3, "BELOW TREND": 2, "ALONG TREND": -2, "ABOVE TREND": -3}
     rates = []
     for i in range(len(scores)):
-        if scores[i] > thresholds["HIGHLY BELOW TREND"]:
+        if scores[i] > lower_bounds["HIGHLY BELOW TREND"]:
             rates.append("HIGHLY BELOW TREND")
-        elif scores[i] > thresholds["BELOW TREND"]:
+        elif scores[i] > lower_bounds["BELOW TREND"]:
             rates.append("BELOW TREND")
-        elif scores[i] > thresholds["ALONG TREND"]:
+        elif scores[i] > lower_bounds["ALONG TREND"]:
             rates.append("ALONG TREND")
-        elif scores[i] > thresholds["ABOVE TREND"]:
+        elif scores[i] > lower_bounds["ABOVE TREND"]:
             rates.append("ABOVE TREND")
         else:
             rates.append("HIGHLY ABOVE TREND")
@@ -416,10 +417,11 @@ if __name__ == '__main__':
 
         # determine which stocks are along trend to avoid plotting them
         if args.rank == "rate":
-            dont_plot = np.where(np.array(ranked_rates) == "ALONG TREND")[0]
+            to_plot = np.where(np.array(ranked_rates) != "ALONG TREND")[0]
         else:
-            dont_plot = np.where(np.array(ranked_rates) != "ALONG TREND")[0]
-        num_to_plot = num_stocks - len(dont_plot)
+            to_plot = np.where(np.array(ranked_rates) == "ALONG TREND")[0][:99]
+        dont_plot = [x for x in np.arange(num_stocks) if x not in to_plot]
+        num_to_plot = len(to_plot)
 
         if num_to_plot > 0:
             print('\nPlotting stock estimation...')
