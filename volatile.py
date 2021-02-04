@@ -338,14 +338,20 @@ if __name__ == '__main__':
         left_mkt_est = np.maximum(0, p_mkt_est - 2 * std_p_mkt_est)
         right_mkt_est = p_mkt_est + 2 * std_p_mkt_est
 
+        plt.grid(axis='both')
         plt.title("Market", fontsize=15)
-        l1 = plt.plot(data["dates"], np.exp(logp.mean(0)),
+        avg_price = np.exp(logp.mean(0))
+        l1 = plt.plot(data["dates"], avg_price,
                       label="avg. price in {}".format(data['default_currency']), color="C0")
         l2 = plt.plot(data["dates"], p_mkt_est[0], label="trend", color="C1")
         l3 = plt.fill_between(data["dates"], left_mkt_est[0], right_mkt_est[0], alpha=0.2, label="+/- 2 st. dev.", color="C0")
         plt.ylabel("avg. price in {}".format(data['default_currency']), fontsize=12)
         plt.twinx()
         l4 = plt.bar(data["dates"], ranked_volume.mean(0), width=1, color='g', alpha=0.2, label='avg. volume')
+        l4[0].set_edgecolor('r')
+        for d in range(1, t):
+            if avg_price[d] - avg_price[d - 1] < 0:
+                l4[d].set_color('r')
         plt.ylabel("avg. volume", fontsize=12)
         ll = l1 + l2 + [l3] + [l4]
         labels = [l.get_label() for l in ll]
@@ -364,9 +370,11 @@ if __name__ == '__main__':
             if i not in NA_sectors:
                 j += 1
                 plt.subplot(int(np.ceil((info['num_sectors'] - num_NA_sectors) / num_columns)), num_columns, j)
+                plt.grid(axis='both')
                 plt.title(info['unique_sectors'][i], fontsize=15)
                 idx_sectors = np.where(np.array(info['sectors_id']) == i)[0]
-                l1 = plt.plot(data["dates"], np.exp(logp[idx_sectors].reshape(-1, t).mean(0)),
+                avg_price = np.exp(logp[idx_sectors].reshape(-1, t).mean(0))
+                l1 = plt.plot(data["dates"], avg_price,
                               label="avg. price in {}".format(data['default_currency']), color="C0")
                 l2 = plt.plot(data["dates"], p_sec_est[i], label="trend", color="C1")
                 l3 = plt.fill_between(data["dates"], left_sec_est[i], right_sec_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
@@ -375,6 +383,10 @@ if __name__ == '__main__':
                 plt.twinx()
                 l4 = plt.bar(data["dates"], data['volume'][np.where(np.array(info['sectors_id']) == i)[0]].reshape(-1, t).mean(0),
                              width=1, color='g', alpha=0.2, label='avg. volume')
+                for d in range(1, t):
+                    if avg_price[d] - avg_price[d - 1] < 0:
+                        l4[d].set_color('r')
+                l4[0].set_edgecolor('r')
                 plt.ylabel("avg. volume", fontsize=12)
                 ll = l1 + l2 + [l3] + [l4]
                 labels = [l.get_label() for l in ll]
@@ -394,10 +406,12 @@ if __name__ == '__main__':
             if i not in NA_industries:
                 j += 1
                 plt.subplot(int(np.ceil((info['num_industries'] - num_NA_industries) / num_columns)), num_columns, j)
+                plt.grid(axis='both')
                 plt.title(info['unique_industries'][i], fontsize=15)
                 idx_industries = np.where(np.array(info['industries_id']) == i)[0]
                 plt.title(info['unique_industries'][i], fontsize=15)
-                l1 = plt.plot(data["dates"], np.exp(logp[idx_industries].reshape(-1, t).mean(0)),
+                avg_price = np.exp(logp[idx_industries].reshape(-1, t).mean(0))
+                l1 = plt.plot(data["dates"], avg_price,
                               label="avg. price in {}".format(data['default_currency']), color="C0")
                 l2 = plt.plot(data["dates"], p_ind_est[i], label="trend", color="C1")
                 l3 = plt.fill_between(data["dates"], left_ind_est[i], right_ind_est[i], alpha=0.2, label="+/- 2 st. dev.", color="C0")
@@ -406,6 +420,10 @@ if __name__ == '__main__':
                 plt.twinx()
                 l4 = plt.bar(data["dates"], data['volume'][np.where(np.array(info['industries_id']) == i)[0]].reshape(-1, t).mean(0),
                              width=1, color='g', alpha=0.2, label='avg. volume')
+                for d in range(1, t):
+                    if avg_price[d] - avg_price[d - 1] < 0:
+                        l4[d].set_color('r')
+                l4[0].set_edgecolor('r')
                 plt.ylabel("avg. volume", fontsize=12)
                 ll = l1 + l2 + [l3] + [l4]
                 labels = [l.get_label() for l in ll]
@@ -434,6 +452,7 @@ if __name__ == '__main__':
                 if i not in dont_plot:
                     j += 1
                     plt.subplot(int(np.ceil(num_to_plot / num_columns)), num_columns, j)
+                    plt.grid(axis='both')
                     plt.title(ranked_tickers[i], fontsize=15)
                     l1 = plt.plot(data["dates"], ranked_p[i], label="price in {}".format(ranked_currencies[i]))
                     l2 = plt.plot(data["dates"], ranked_p_est[i], label="trend")
@@ -444,6 +463,10 @@ if __name__ == '__main__':
                     plt.ylabel("price in {}".format(ranked_currencies[i]), fontsize=12)
                     plt.twinx()
                     l4 = plt.bar(data["dates"], ranked_volume[i], width=1, color='g', alpha=0.2, label='volume')
+                    for d in range(1, t):
+                        if ranked_p[i, d] - ranked_p[i, d - 1] < 0:
+                            l4[d].set_color('r')
+                    l4[0].set_edgecolor('r')
                     plt.ylabel("volume", fontsize=12)
                     ll = l1 + l2 + [l3] + [l4]
                     labels = [l.get_label() for l in ll]

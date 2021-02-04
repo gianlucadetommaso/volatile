@@ -26,7 +26,7 @@ Volatile will automatically analyse the list of stock symbols saved in `symbols_
 
 When the run is complete, a prediction table like the following will appear printed on your shell:
 
-<img width="996" alt="Screenshot 2021-01-29 at 00 33 33" src="https://user-images.githubusercontent.com/32386694/106212084-bc42aa00-61c1-11eb-87b7-c06cb64c7f75.png">
+<img width="995" alt="Screenshot 2021-02-04 at 18 41 29" src="https://user-images.githubusercontent.com/32386694/106933402-c2c8a880-6710-11eb-8ce8-7db858703e10.png">
 
 For each symbol, the table tells you its sector and industry, then the last available price, a rate and a current percentage trend growth. Possible rates are HIGHLY ABOVE TREND, ABOVE TREND, ALONG TREND, BELOW TREND and HIGHLY BELOW TREND. They are derived from a score metric that compares the predicted price in 5 trading days (usually this corresponds to the price in one week) to the last available observed price, scaling by the standard deviation of the prediction (see the technical section below for more details). The current percentage trend growth is a real number (positive or negative) corresponding to how fast the trend is currently going up or down (again, see the technical section). This is a particularly interesting measure for stocks ALONG TREND, whose price evolution can be sensibly approximated by their trends. 
 
@@ -36,17 +36,17 @@ In the current directory, several estimation plots will appear. `stock_estimatio
 
 Notice how the estimation crucially attempts to reproduce the trend of a stock but not to learn its noise. The uncertainty, on the other hand, depends on the stock volatility; the smaller the volatility, the more confident we are about our estimates, the more a sudden shift from the trend will be regarded as significant. You can use this plot as a sanity check that the estimation procedure agrees with your intuition. Make sure to glance at it before any transaction.
 
-<img width="1147" alt="Screenshot 2021-01-29 at 00 35 04" src="https://user-images.githubusercontent.com/32386694/106212088-be0c6d80-61c1-11eb-9da3-a84342ce1c48.png">
+<img width="988" alt="Screenshot 2021-02-04 at 18 39 54" src="https://user-images.githubusercontent.com/32386694/106933333-b17f9c00-6710-11eb-89e7-5bc10dbdf180.png">
 
  `sector_estimation.png` and `industry_estimation.png` are plots that help you quickly visualising estimated sector and industry performances. A sector estimate can be thought as the average behaviour of its belonging industries, which in turn should be regarded as the average behaviour of its belonging stocks. Both sectors and industries are ranked in alphabetical order. 
  
-<img width="1332" alt="Screenshot 2021-01-29 at 00 35 33" src="https://user-images.githubusercontent.com/32386694/106212094-c19ff480-61c1-11eb-9322-c70f04443d23.png">
+<img width="1325" alt="Screenshot 2021-02-04 at 18 42 08" src="https://user-images.githubusercontent.com/32386694/106933362-b8a6aa00-6710-11eb-9ea4-cfd743b7f4e6.png">
 
-<img width="1165" alt="Screenshot 2021-01-29 at 00 36 27" src="https://user-images.githubusercontent.com/32386694/106212098-c369b800-61c1-11eb-97a7-9ffb80cc5738.png">
+<img width="974" alt="Screenshot 2021-02-04 at 18 42 39" src="https://user-images.githubusercontent.com/32386694/106933347-b5abb980-6710-11eb-9cb4-42cd9c3fe7e8.png">
 
 Finally,  `market_estimation.png` shows the overall estimated market trend. This can be considered as the average of the sector estimates. Use this plot to immediately know in what phase the stock market currently is.
 
-<img width="905" alt="Screenshot 2021-01-29 at 00 36 00" src="https://user-images.githubusercontent.com/32386694/106212102-c5cc1200-61c1-11eb-9e59-7877acfc056e.png">
+<img width="906" alt="Screenshot 2021-02-04 at 18 41 52" src="https://user-images.githubusercontent.com/32386694/106933372-bb090400-6710-11eb-92cb-4becae75c55d.png">
 
 If you do not want plots to be saved in the current directory, you can disable them by adding the flag `--no-plots`.
 
@@ -152,7 +152,7 @@ where <a href="https://www.codecogs.com/eqnedit.php?latex=\text{Std}" target="_b
 
 where <a href="https://www.codecogs.com/eqnedit.php?latex=\delta_{i,j}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\delta_{i,j}" title="\delta_{i,j}" /></a> denotes a Kronecker delta and <a href="https://www.codecogs.com/eqnedit.php?latex=\hat{\nu}_{T,i},&space;\hat{\nu}_{T,\ell}^\iota,&space;\hat{\nu}_{T,k}^s,&space;\hat{\nu}_T^m" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat{\nu}_{T,i},&space;\hat{\nu}_{T,\ell}^\iota,&space;\hat{\nu}_{T,k}^s,&space;\hat{\nu}_T^m" title="\hat{\nu}_{T,i}, \hat{\nu}_{T,\ell}^\iota, \hat{\nu}_{T,k}^s, \hat{\nu}_T^m" /></a> are price standard deviation estimators at stock, industry, sector and market levels. Although the covariance approximation above does not exactly correspond to the model in use, it is useful to associate higher risk to stocks with higher volatility and to increase the risk if multiple stocks in the portfolio belong to the same category. 
 
-Notice that because standard deviations are multiplied by the number of owned units and because higher prices usually tend to have higher standard deviations, a larger invested capital is prone to be associated with a higher risk. Furthermore, we divide by the number of stocks in the portfolio to promote diversification as a way to promote lower risk. 
+Notice that because standard deviations are multiplied by the number of owned units and because higher prices usually tend to have higher standard deviations, a larger invested capital is prone to be associated with a higher risk. Furthermore, we divide by the number of stocks in the portfolio to promote diversification as a way to lower risk. 
 
 ### Bots description
 Meet the participants of the bot-tournament! Remember: you can run the tournament via `python tournament.py`.
@@ -248,7 +248,7 @@ Eddy prefers stocks that are going fairly strong. He buys a stock only if it is 
 <td>
   
 ### Flora
-Flora likes strong and steady growing stocks. She buys stocks ALONG TREND with the largest positive SLOPE, with a maximum transaction of 3.33% of her current capital. Her goal is to have around 30 stocks in her portfolio. She sells a stock as soon as she makes a 10% profit or a 20% loss out of it.
+Flora likes strong and steady growing stocks. She buys stocks ALONG TREND with the largest positive GROWTH, with a maximum transaction of 3.33% of her current capital. Her goal is to have around 30 stocks in her portfolio. She sells a stock as soon as she makes a 10% profit or a 20% loss out of it.
 </td>
 </tr>
 </table>
