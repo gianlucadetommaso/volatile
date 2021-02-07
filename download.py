@@ -63,7 +63,7 @@ def download(tickers: list, start: Union[str, int] = None, end: Union[str, int] 
         start = int(dt.datetime.timestamp(dt.datetime.strptime(start, '%Y-%m-%d')))
 
     @multitasking.task
-    def _download_one_threaded(ticker: str, start: str, end: str, interval: str = "1d"):
+    def _download_one_threaded(ticker: str, start: int, end: int, interval: str = "1d"):
         """
         Download historical data for a single ticker with multithreading. Plus, it scrapes missing stock information.
 
@@ -73,25 +73,21 @@ def download(tickers: list, start: Union[str, int] = None, end: Union[str, int] 
             Ticker for which to download historical information.
         interval: str
             Frequency between data.
-        start: str
+        start: int
             Start download data from this date.
-        end: str
+        end: int
             End download data at this date.
         """
-        data_one = _download_one(ticker, start, end, interval)
-
+        data_one, info = _download_one(ticker, start, end, interval)
         try:
             data_one = data_one["chart"]["result"][0]
-            data[ticker] = _parse_quotes(data_one)
+            data[ticker] = _parse_quotes(data_one, info['price'])
 
             if ticker in missing_tickers:
                 currencies[ticker] = data_one['meta']['currency']
                 try:
-                    html = requests.get(url='https://finance.yahoo.com/quote/' + ticker).text
-                    json_str = html.split('root.App.main =')[1].split('(this)')[0].split(';\n}')[0].strip()
-                    info = json.loads(json_str)['context']['dispatcher']['stores']['QuoteSummaryStore']['summaryProfile']
-                    assert (len(info['sector']) > 0) and (len(info['industry']) > 0)
-                    missing_si[ticker] = dict(sector=info["sector"], industry=info["industry"])
+                    assert (len(info['summaryProfile']['sector']) > 0) and (len(info['summaryProfile']['industry']) > 0)
+                    missing_si[ticker] = dict(sector=info['summaryProfile']["sector"], industry=info['summaryProfile']["industry"])
                 except:
                     pass
         except:
@@ -137,7 +133,7 @@ def download(tickers: list, start: Union[str, int] = None, end: Union[str, int] 
     xrates = get_exchange_rates(currencies, default_currency, data.index, start, end, interval)
 
     return dict(tickers=tickers,
-                dates=pd.to_datetime(data.index),
+                dates=data.index,
                 price=data.iloc[:, data.columns.get_level_values(1) == 'Adj Close'].to_numpy().T,
                 volume=data.iloc[:, data.columns.get_level_values(1) == 'Volume'].to_numpy().T,
                 currencies=currencies,
@@ -146,7 +142,7 @@ def download(tickers: list, start: Union[str, int] = None, end: Union[str, int] 
                 sectors={ticker: si[ticker]['SECTOR'] if ticker in si else "NA_" + ticker for ticker in tickers},
                 industries={ticker: si[ticker]['INDUSTRY'] if ticker in si else "NA_" + ticker for ticker in tickers})
 
-def _download_one(ticker: str, start: int, end: int, interval: str = "1d") -> dict:
+def _download_one(ticker: str, start: int, end: int, interval: str = "1d", get_info: bool = True) -> Union[dict, tuple]:
     """
     Download historical data for a single ticker.
 
@@ -160,6 +156,8 @@ def _download_one(ticker: str, start: int, end: int, interval: str = "1d") -> di
         End download data at this timestamp date.
     interval: str
         Frequency between data.
+    get_info: bool
+        Download ticker information. True by default.
 
     Returns
     -------
@@ -171,15 +169,24 @@ def _download_one(ticker: str, start: int, end: int, interval: str = "1d") -> di
     params = dict(period1=start, period2=end, interval=interval.lower(), includePrePost=False)
 
     url = "{}/v8/finance/chart/{}".format(base_url, ticker)
-    data = requests.get(url=url, params=params)
+    historical = requests.get(url=url, params=params)
 
-    if "Will be right back" in data.text:
+    if "Will be right back" in historical.text:
         raise RuntimeError("*** YAHOO! FINANCE is currently down! ***\n")
+    historical = historical.json()
+    if not get_info:
+        return historical
 
-    data = data.json()
-    return data
+    info = None
+    try:
+        html = requests.get(url='https://finance.yahoo.com/quote/' + ticker).text
+        json_str = html.split('root.App.main =')[1].split('(this)')[0].split(';\n}')[0].strip()
+        info = json.loads(json_str)['context']['dispatcher']['stores']['QuoteSummaryStore']
+    except:
+        pass
+    return historical, info
 
-def _parse_quotes(data: dict, parse_volume: bool = True) -> pd.DataFrame:
+def _parse_quotes(data: dict, info_price: dict = None, parse_volume: bool = True) -> pd.DataFrame:
     """
     It creates a data frame of adjusted closing prices, and, if `parse_volume=True`, volumes. If no adjusted closing
     price is available, it sets it equal to closing price.
@@ -205,8 +212,20 @@ def _parse_quotes(data: dict, parse_volume: bool = True) -> pd.DataFrame:
     if parse_volume:
         quotes["Volume"] = volumes
     quotes = pd.DataFrame(quotes)
+    # transform timestamps into local times
     quotes.index = pd.to_datetime(timestamps, unit="s").date
     quotes.sort_index(inplace=True)
+
+    now = dt.datetime.utcnow()
+    prestart = pd.to_datetime(data['meta']['currentTradingPeriod']['pre']['start'], unit="s")
+    regstart = pd.to_datetime(data['meta']['currentTradingPeriod']['regular']['start'], unit="s")
+    regend = pd.to_datetime(data['meta']['currentTradingPeriod']['regular']['end'], unit="s")
+
+    if info_price is not None:
+        if prestart < now < regstart and 'raw' in info_price['preMarketPrice']:
+            quotes.append(pd.DataFrame([info_price['preMarketPrice']['raw'], 0.], index=[dt.datetime.utcnow().date()], columns=["Adj Close", "Volume"]))
+        elif now > regend and 'raw' in info_price['postMarketPrice']:
+            quotes.at[quotes.index[-1], "Adj Close"] = info_price['postMarketPrice']['raw']
 
     return quotes
 
@@ -250,7 +269,7 @@ def get_exchange_rates(from_currencies: list, to_currency: str, dates: pd.Index,
     if to_currency not in ucurrencies or len(ucurrencies) > 1:
         for curr in ucurrencies:
             if curr != to_currency:
-                tmp[curr] = _download_one(curr + to_currency + "=x", start, end, interval)
+                tmp[curr] = _download_one(curr + to_currency + "=x", start, end, interval, get_info=False)
                 tmp[curr] = _parse_quotes(tmp[curr]["chart"]["result"][0], parse_volume=False)["Adj Close"]
         tmp = pd.concat(tmp.values(), keys=tmp.keys(), axis=1, sort=True)
         xrates = pd.DataFrame(index=dates, columns=tmp.columns)
