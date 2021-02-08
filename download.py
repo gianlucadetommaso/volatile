@@ -133,7 +133,7 @@ def download(tickers: list, start: Union[str, int] = None, end: Union[str, int] 
     xrates = get_exchange_rates(currencies, default_currency, data.index, start, end, interval)
 
     return dict(tickers=tickers,
-                dates=data.index,
+                dates=pd.to_datetime(data.index),
                 price=data.iloc[:, data.columns.get_level_values(1) == 'Adj Close'].to_numpy().T,
                 volume=data.iloc[:, data.columns.get_level_values(1) == 'Volume'].to_numpy().T,
                 currencies=currencies,
@@ -223,7 +223,8 @@ def _parse_quotes(data: dict, info_price: dict = None, parse_volume: bool = True
 
     if info_price is not None:
         if prestart < now < regstart and 'raw' in info_price['preMarketPrice']:
-            quotes.append(pd.DataFrame([info_price['preMarketPrice']['raw'], 0.], index=[dt.datetime.utcnow().date()], columns=["Adj Close", "Volume"]))
+            quotes = quotes.append(pd.DataFrame([[info_price['preMarketPrice']['raw'], 0.]], index=[now.date()],
+                                                columns=["Adj Close", "Volume"]))
         elif now > regend and 'raw' in info_price['postMarketPrice']:
             quotes.at[quotes.index[-1], "Adj Close"] = info_price['postMarketPrice']['raw']
 
