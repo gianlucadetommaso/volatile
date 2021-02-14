@@ -236,3 +236,49 @@ def plot_stock_estimates(data: dict, est: np.array, std: np.array, rank_type: st
 
     elif os.path.exists('stock_estimation.png'):
         os.remove('stock_estimation.png')
+
+def plot_matches(data: dict, matches: dict):
+    """
+    It plots matches with smallest computed distance.
+
+    Parameters
+    ----------
+    data: dict
+        Downloaded data.
+    matches: dict
+        For each symbol, this dictionary contains a corresponding `match` symbol, the `index` of the match symbol in the
+        list of symbols and the computed `distance` between the two.
+    """
+    print('\nPlotting matches estimation...')
+    num_columns = 3
+
+    tickers = np.array(data['tickers'])
+    num_to_plot = min(len(tickers), 99)
+    prices = data['price']
+    currencies = np.array(data['currencies'])
+
+    idx = np.argsort([matches[ticker]['distance'] for ticker in tickers])
+    matched_idx = np.unique([{i, matches[tickers[i]]['index']} for i in idx]).tolist()[:num_to_plot]
+
+    fig = plt.figure(figsize=(20, max(num_to_plot, 5)))
+    j = 0
+    for j, couple in enumerate(matched_idx):
+        i1, i2 = tuple(couple)
+        ticker, match = tickers[i1], tickers[i2]
+        plt.subplot(int(np.ceil(num_to_plot / num_columns)), num_columns, j + 1)
+        plt.grid(axis='both')
+        plt.title("{} & {}".format(ticker, match), fontsize=15)
+
+        l1 = plt.plot(data["dates"], prices[i1], c="C0", label="price of {} in {}".format(tickers[i1], currencies[i1]))
+        plt.ylabel("price of {} in {}".format(tickers[i1], currencies[i1]), fontsize=12)
+        plt.twinx()
+        l2 = plt.plot(data["dates"], prices[i2], c="C1", label="price of {} in {}".format(match, currencies[i2]))
+        plt.ylabel("price of {} in {}".format(match, currencies[i2]), fontsize=12)
+        ll = l1 + l2
+        labels = [l.get_label() for l in ll]
+        plt.legend(ll, labels, loc="upper left")
+    plt.tight_layout()
+
+    fig_name = 'matches_estimation.png'
+    print('Matches estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
+    fig.savefig(fig_name, dpi=fig.dpi)

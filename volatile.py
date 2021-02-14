@@ -13,6 +13,7 @@ from plotting import *
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
+import multitasking
 
 def define_model(info: dict, level: str = "stock") -> tfd.JointDistributionSequentialAutoBatched:
     """
@@ -219,6 +220,54 @@ def rate(scores: np.array, lower_bounds: dict = None) -> list:
             rates.append("HIGHLY ABOVE TREND")
     return rates
 
+def estimate_matches(tickers: list, phi: np.array, tt: np.array) -> dict:
+    """
+    It estimates matches of correlated stocks.
+
+    Parameters
+    ----------
+    tickers: list
+        List of tickers
+    phi: np.array
+        Parameters of regression polynomial.
+    tt: np.array
+        Array of times corresponding to days of trading.
+
+    Returns
+    -------
+    matches: dict
+        For each symbol, this dictionary contains a corresponding `match` symbol, the `index` of the match symbol in the
+        list of symbols and the computed `distance` between the two.
+    """
+    dtt = np.arange(1, tt.shape[0])[:, None] * tt[1:] / tt[1, None]
+    dlogp_est = np.dot(phi[:, 1:],  dtt)
+    num_stocks = len(tickers)
+    try:
+        assert num_stocks <= 2000
+        match_dist = np.sum((dlogp_est[:, None] - dlogp_est[None]) ** 2, 2)
+        match_minidx = np.argsort(match_dist, 1)[:, 1]
+        match_mindist = np.sort(match_dist, 1)[:, 1]
+        matches = {tickers[i]: {"match": tickers[match_minidx[i]],
+                              "index": match_minidx[i],
+                              "distance": match_mindist[i]} for i in range(num_stocks)}
+    except:
+        num_threads = min([len(tickers), multitasking.cpu_count() * 2])
+        multitasking.set_max_threads(num_threads)
+
+        matches = {}
+
+        @multitasking.task
+        def _estimate_one(i, tickers, dlogp_est):
+            match_dist = np.sum((dlogp_est[i] - dlogp_est) ** 2, 1)
+            match_minidx = np.argsort(match_dist)[1]
+            match_mindist = np.sort(match_dist)[1]
+            matches[tickers[i]] = {"match": tickers[match_minidx], "index": match_minidx, "distance": match_mindist}
+
+        for i in range(num_stocks):
+            _estimate_one(i, tickers, dlogp_est)
+
+    return matches
+
 if __name__ == '__main__':
     cli = ArgumentParser('Volatile: your day-to-day trading companion.',
                          formatter_class=ArgumentDefaultsHelpFormatter)
@@ -257,12 +306,29 @@ if __name__ == '__main__':
 
     info = extract_hierarchical_info(data['sectors'], data['industries'])
 
+    print("\nTraining a model that discovers correlations...")
+    # order of the polynomial
+    order = 52
+
+    # times corresponding to trading dates in the data
+    info['tt'] = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+    # reweighing factors for parameters corresponding to different orders of the polynomial
+    info['order_scale'] = np.ones((1, order + 1), dtype='float32')
+
+    # train the model
+    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp, info, num_steps=50000)
+
+    print("Training completed.")
+
+    print("\nEstimate top matches...")
+    matches = estimate_matches(tickers, phi.numpy(), info['tt'])
+    print("Top matches estimation completed.")
+
+    print("\nTraining a model that estimates and predicts trends...")
     # how many days to look ahead when comparing the current price against a prediction
     horizon = 5
     # order of the polynomial
     order = 2
-
-    print("\nTraining the model...")
 
     # times corresponding to trading dates in the data
     info['tt'] = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
@@ -271,6 +337,8 @@ if __name__ == '__main__':
 
     # train the model
     phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp, info, plot_losses=args.plot_losses)
+
+    print("Training completed.")
 
     ## log-price statistics (Normal distribution)
     # calculate stock-level estimators of log-prices
@@ -284,8 +352,6 @@ if __name__ == '__main__':
     logp_sec_est, std_logp_sec_est = estimate_logprice_statistics(phi_s.numpy(), psi_s.numpy(), info['tt'])
     # calculate market-level estimators of log-prices
     logp_mkt_est, std_logp_mkt_est = estimate_logprice_statistics(phi_m.numpy(), psi_m.numpy(), info['tt'])
-
-    print("Training completed.")
 
     # compute score
     scores = (logp_pred[:, horizon] - logp[:, -1]) / std_logp_pred.squeeze()
@@ -317,6 +383,7 @@ if __name__ == '__main__':
     ranked_p = data['price'][rank]
     ranked_currencies = np.array(data['currencies'])[rank]
     ranked_growth = growth[rank]
+    ranked_matches = np.array([matches[ticker]["match"] for ticker in ranked_tickers])
 
     # rate stocks
     ranked_rates = rate(ranked_scores)
@@ -326,21 +393,23 @@ if __name__ == '__main__':
         plot_sector_estimates(data, info, p_sec_est, std_p_sec_est)
         plot_industry_estimates(data, info, p_ind_est, std_p_ind_est)
         plot_stock_estimates(data, p_est, std_p_est, args.rank, rank, ranked_rates)
+        plot_matches(data, matches)
 
     print("\nPREDICTION TABLE")
     ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(list(data["sectors"].values()))[rank]]
     ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(list(data["industries"].values()))[rank]]
 
-    strf = "{:<15} {:<26} {:<42} {:<24} {:<22} {:<5}"
-    num_dashes = 141
+    strf = "{:<15} {:<26} {:<42} {:<16} {:<22} {:<11} {:<4}"
+    num_dashes = 143
     separator = num_dashes * "-"
     print(num_dashes * "-")
-    print(strf.format("SYMBOL", "SECTOR", "INDUSTRY", "LAST AVAILABLE PRICE", "RATE", "GROWTH"))
+    print(strf.format("SYMBOL", "SECTOR", "INDUSTRY", "PRICE", "RATE", "GROWTH", "MATCH"))
     print(separator)
     for i in range(num_stocks):
         print(strf.format(ranked_tickers[i], ranked_sectors[i], ranked_industries[i],
                           "{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]), ranked_rates[i],
-                          "{}{}{}".format("+" if ranked_growth[i] >= 0 else "", np.round(100 * ranked_growth[i], 2), '%')))
+                          "{}{}{}".format("+" if ranked_growth[i] >= 0 else "", np.round(100 * ranked_growth[i], 2), '%'),
+                          ranked_matches[i]))
         print(separator)
         if i < num_stocks - 1 and ranked_rates[i] != ranked_rates[i + 1]:
             print(separator)
@@ -350,9 +419,11 @@ if __name__ == '__main__':
         table = zip(["SYMBOL"] + ranked_tickers.tolist(),
                     ['SECTOR'] + ranked_sectors,
                     ['INDUSTRY'] + ranked_industries,
-                    ["LAST AVAILABLE PRICE"] + ["{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]) for i in range(num_stocks)],
+                    ["PRICE"] + ["{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]) for i in range(num_stocks)],
                     ["RATE"] + ranked_rates,
-                    ["GROWTH"] + ranked_growth / t)
+                    ["GROWTH"] + ranked_growth / t,
+                    ["MATCH"] + ranked_matches)
+
         with open(tab_name, 'w') as file:
             wr = csv.writer(file)
             for row in table:
