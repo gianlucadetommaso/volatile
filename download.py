@@ -207,6 +207,7 @@ def _parse_quotes(data: dict, parse_volume: bool = True) -> pd.DataFrame:
     quotes = pd.DataFrame(quotes)
     quotes.index = pd.to_datetime(timestamps, unit="s").date
     quotes.sort_index(inplace=True)
+    quotes = quotes.loc[~quotes.index.duplicated(keep='first')]
 
     return quotes
 
