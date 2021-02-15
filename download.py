@@ -200,6 +200,7 @@ def _parse_quotes(data: dict, parse_volume: bool = True) -> pd.DataFrame:
         adjclose = data["indicators"]["adjclose"][0]["adjclose"]
     except:
         adjclose = closes
+    assert (np.array(adjclose) > 0).all()
 
     quotes = {"Adj Close": adjclose}
     if parse_volume:
