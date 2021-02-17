@@ -421,8 +421,8 @@ if __name__ == '__main__':
                     ['INDUSTRY'] + ranked_industries,
                     ["PRICE"] + ["{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]) for i in range(num_stocks)],
                     ["RATE"] + ranked_rates,
-                    ["GROWTH"] + ranked_growth / t,
-                    ["MATCH"] + ranked_matches)
+                    ["GROWTH"] + ranked_growth.tolist(),
+                    ["MATCH"] + ranked_matches.tolist())
 
         with open(tab_name, 'w') as file:
             wr = csv.writer(file)
