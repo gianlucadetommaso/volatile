@@ -114,7 +114,7 @@ def extract_hierarchical_info(sectors: dict, industries: dict) -> dict:
     sector_industries_id = np.array(sectors_id)[industries_idx].tolist()
 
     # place relevant information in dictionary
-    return dict(num_sectors=num_sectors, num_industries=num_industries, industries_id=industries_id,
+    return dict(num_stocks=len(sectors), num_sectors=num_sectors, num_industries=num_industries, industries_id=industries_id,
                 sectors_id=sectors_id, sector_industries_id=sector_industries_id, unique_sectors = usectors,
                 unique_industries=uindustries)
 

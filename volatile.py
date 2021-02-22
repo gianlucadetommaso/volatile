@@ -9,134 +9,12 @@ import os.path
 from download import download
 from tools import convert_currency, extract_hierarchical_info
 from plotting import *
+from models import *
 
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow_probability import distributions as tfd
 import multitasking
-
-def define_model(info: dict, level: str = "stock") -> tfd.JointDistributionSequentialAutoBatched:
-    """
-    Define and return graphical model.
-
-    Parameters
-    ----------
-    info: dict
-        Data information.
-    level: str
-        Level of the model; possible candidates are "stock", "industry", "sector" and "market".
-    """
-    tt = info['tt']
-    order_scale = info['order_scale']
-    order =  len(order_scale) - 1
-    num_sectors = info['num_sectors']
-    sec2ind_id = info['sector_industries_id']
-    ind_id = info['industries_id']
-
-    available_levels = ["market", "sector", "industry", "stock"]
-    if level not in available_levels:
-        raise Exception("Selected level is unknown. Please provide one of the following levels: {}.".format(available_levels))
-
-    m = [tfd.Normal(loc=tf.zeros([1, order + 1]), scale=4 * order_scale), # phi_m
-         tfd.Normal(loc=0, scale=4)] # psi_m
-
-    if level != "market":
-        m += [lambda psi_m, phi_m: tfd.Normal(loc=tf.repeat(phi_m, num_sectors, axis=0), scale=2 * order_scale), # phi_s
-              lambda phi_s, psi_m: tfd.Normal(loc=psi_m, scale=2 * tf.ones([num_sectors, 1]))] # psi_s
-
-        if level != "sector":
-            sec2ind_id = info['sector_industries_id']
-            m += [lambda psi_s, phi_s: tfd.Normal(loc=tf.gather(phi_s, sec2ind_id, axis=0), scale=order_scale), # phi_i
-                  lambda phi_i, psi_s: tfd.Normal(loc=tf.gather(psi_s, sec2ind_id, axis=0), scale=1)] # psi_ii
-
-            if level != "industry":
-                ind_id = info['industries_id']
-                m += [lambda psi_i, phi_i: tfd.Normal(loc=tf.gather(phi_i, ind_id, axis=0), scale=0.5 * order_scale), # phi
-                      lambda phi, psi_i: tfd.Normal(loc=tf.gather(psi_i, ind_id, axis=0), scale=0.5)]  # psi
-
-    if level == "market":
-        m += [lambda psi_m, phi_m: tfd.Normal(loc=tf.tensordot(phi_m, tt, axes=1), scale=tf.math.softplus(psi_m))] # y
-    if level == "sector":
-        m += [lambda psi_s, phi_s: tfd.Normal(loc=tf.tensordot(phi_s, tt, axes=1), scale=tf.math.softplus(psi_s))] # y
-    if level == "industry":
-        m += [lambda psi_i, phi_i: tfd.Normal(loc=tf.tensordot(phi_i, tt, axes=1), scale=tf.math.softplus(psi_i))] # y
-    if level == "stock":
-        m += [lambda psi, phi: tfd.Normal(loc=tf.tensordot(phi, tt, axes=1), scale=tf.math.softplus(psi))] # y
-
-    return tfd.JointDistributionSequentialAutoBatched(m)
-
-def train(logp: np.array, info: dict, learning_rate: float = 0.01, num_steps: int = 10000, plot_losses: bool = False) -> tuple:
-    """
-    It performs sequential optimization over the model parameters via Adam optimizer, training at different levels to
-    provide sensible initial solutions at finer levels.
-
-    Parameters
-    ----------
-    logp: np.array
-        Log-price at stock-level.
-    info: dict
-        Data information.
-    learning_rate: float
-        Adam's fixed learning rate.
-    num_steps: int
-        Adam's fixed number of iterations.
-    plot_losses: bool
-        If True, a losses decay plot is saved in the current directory.
-
-    Returns
-    -------
-    It returns a tuple of trained parameters.
-    """
-    optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
-    num_steps_l = int(np.ceil(num_steps // 4))
-
-    # market
-    model = define_model(info, "market")
-    phi_m, psi_m = (tf.Variable(tf.zeros_like(model.sample()[:2][i])) for i in range(2))
-    loss_m = tfp.math.minimize(lambda: -model.log_prob([phi_m, psi_m, logp.mean(0, keepdims=1)]),
-                             optimizer=optimizer, num_steps=num_steps_l)
-    # sector
-    model = define_model(info, "sector")
-    phi_m, psi_m = tf.constant(phi_m), tf.constant(psi_m)
-    phi_s, psi_s = (tf.Variable(tf.zeros_like(model.sample()[2:4][i])) for i in range(2))
-    logp_s = np.array([logp[np.where(np.array(info['sectors_id']) == k)[0]].mean(0) for k in range(info['num_sectors'])])
-    loss_s = tfp.math.minimize(lambda: -model.log_prob([phi_m, psi_m, phi_s, psi_s, logp_s]),
-                             optimizer=optimizer, num_steps=num_steps_l)
-
-    # industry
-    model = define_model(info, "industry")
-    phi_s, psi_s = tf.constant(phi_s), tf.constant(psi_s)
-    phi_i, psi_i = (tf.Variable(tf.zeros_like(model.sample()[4:6][i])) for i in range(2))
-    logp_i = np.array([logp[np.where(np.array(info['industries_id']) == k)[0]].mean(0) for k in range(info['num_industries'])])
-    loss_i = tfp.math.minimize(lambda: -model.log_prob([phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, logp_i]),
-                             optimizer=optimizer, num_steps=num_steps_l)
-    # stock
-    model = define_model(info, "stock")
-    phi_i, psi_i = tf.constant(phi_i), tf.constant(psi_i)
-    phi, psi = (tf.Variable(tf.zeros_like(model.sample()[6:8][i])) for i in range(2))
-    loss = tfp.math.minimize(lambda: -model.log_prob([phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi, logp]),
-                             optimizer=optimizer, num_steps=num_steps_l)
-
-    if plot_losses:
-        fig_name = 'losses_decay.png'
-        fig = plt.figure(figsize=(20, 3))
-        plt.subplot(141)
-        plt.title("market-level", fontsize=12)
-        plt.plot(loss_m)
-        plt.subplot(142)
-        plt.title("sector-level", fontsize=12)
-        plt.plot(loss_s)
-        plt.subplot(143)
-        plt.title("industry-level", fontsize=12)
-        plt.plot(loss_i)
-        plt.subplot(144)
-        plt.title("stock-level", fontsize=12)
-        plt.plot(loss)
-        plt.legend(["loss decay"], fontsize=12, loc="upper right")
-        plt.xlabel("iteration", fontsize=12)
-        fig.savefig(fig_name, dpi=fig.dpi)
-        print('Losses decay plot has been saved in this directory as {}.'.format(fig_name))
-    return phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi
 
 def softplus(x: np.array) -> np.array:
     """
@@ -149,15 +27,15 @@ def softplus(x: np.array) -> np.array:
     """
     return np.log(1 + np.exp(x))
 
-def estimate_logprice_statistics(phi: np.array, psi: np.array, tt: np.array) -> tuple:
+def estimate_logprice_statistics(mu: np.array, sigma: np.array, tt: np.array) -> tuple:
     """
     It estimates mean and standard deviations of log-prices.
 
     Parameters
     ----------
-    phi: np.array
+    mu: np.array
         Parameters of regression polynomial.
-    psi: np.array
+    sigma: np.array
         Parameters of standard deviation.
     tt: np.array
         Sequence of times to evaluate statistics at.
@@ -166,7 +44,7 @@ def estimate_logprice_statistics(phi: np.array, psi: np.array, tt: np.array) -> 
     -------
     It returns a tuple of mean and standard deviation log-price estimators.
     """
-    return np.dot(phi, tt), softplus(psi)
+    return np.dot(mu, tt), softplus(sigma)
 
 def estimate_price_statistics(mu: np.array, sigma: np.array):
     """
@@ -220,7 +98,7 @@ def rate(scores: np.array, lower_bounds: dict = None) -> list:
             rates.append("HIGHLY ABOVE TREND")
     return rates
 
-def estimate_matches(tickers: list, phi: np.array, tt: np.array) -> dict:
+def estimate_matches(tickers: list, mu: np.array, tt: np.array) -> dict:
     """
     It estimates matches of correlated stocks.
 
@@ -228,7 +106,7 @@ def estimate_matches(tickers: list, phi: np.array, tt: np.array) -> dict:
     ----------
     tickers: list
         List of tickers
-    phi: np.array
+    mu: np.array
         Parameters of regression polynomial.
     tt: np.array
         Array of times corresponding to days of trading.
@@ -240,7 +118,7 @@ def estimate_matches(tickers: list, phi: np.array, tt: np.array) -> dict:
         list of symbols and the computed `distance` between the two.
     """
     dtt = np.arange(1, tt.shape[0])[:, None] * tt[1:] / tt[1, None]
-    dlogp_est = np.dot(phi[:, 1:],  dtt)
+    dlogp_est = np.dot(mu[:, 1:],  dtt)
     num_stocks = len(tickers)
     try:
         assert num_stocks <= 2000
@@ -267,6 +145,43 @@ def estimate_matches(tickers: list, phi: np.array, tt: np.array) -> dict:
             _estimate_one(i, tickers, dlogp_est)
 
     return matches
+
+def estimate_clusters(tickers: list, mu: np.array, tt: np.array):
+    dtt = np.arange(1, tt.shape[0])[:, None] * tt[1:] / tt[1, None]
+    dlogp_est = np.dot(mu[:, 1:],  dtt)
+    num_stocks = len(tickers)
+
+    num_threads = min([len(tickers), multitasking.cpu_count() * 2])
+    multitasking.set_max_threads(num_threads)
+
+    clusters = []
+
+    def _unite_clusters(clusters):
+        k = 0
+        flag = 0
+        while k < len(clusters):
+            for j in range(k + 1, len(clusters)):
+                if clusters[j] & clusters[k]:
+                    clusters[j] = clusters[j].union(clusters[k])
+                    flag = 1
+                    break
+            if flag:
+                del clusters[k]
+                flag = 0
+            else:
+                k += 1
+        return clusters
+
+    def _estimate_one(i, dlogp_est):
+        dist = np.sum((dlogp_est[i] - dlogp_est) ** 2, 1)
+        clusters.append(set(np.argsort(dist)[:2].tolist()))
+        return _unite_clusters(clusters)
+
+
+    for i in range(num_stocks):
+        clusters = _estimate_one(i, dlogp_est)
+
+    return [np.where([j in clusters[k] for k in range(len(clusters))])[0][0] for j in range(num_stocks)]
 
 if __name__ == '__main__':
     cli = ArgumentParser('Volatile: your day-to-day trading companion.',
@@ -316,12 +231,13 @@ if __name__ == '__main__':
     info['order_scale'] = np.ones((1, order + 1), dtype='float32')
 
     # train the model
-    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp, info, num_steps=50000)
+    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train_msis_mcs(logp, info, num_steps=50000)
 
     print("Training completed.")
 
     print("\nEstimate top matches...")
     matches = estimate_matches(tickers, phi.numpy(), info['tt'])
+
     print("Top matches estimation completed.")
 
     print("\nTraining a model that estimates and predicts trends...")
@@ -336,7 +252,7 @@ if __name__ == '__main__':
     info['order_scale'] = np.linspace(1 / (order + 1), 1, order + 1)[::-1].astype('float32')[None, :]
 
     # train the model
-    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp, info, plot_losses=args.plot_losses)
+    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train_msis_mcs(logp, info, plot_losses=args.plot_losses)
 
     print("Training completed.")
 

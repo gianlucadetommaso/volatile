@@ -7,9 +7,9 @@ import os
 import datetime as dt
 
 from tools import convert_currency, extract_hierarchical_info, compute_risk
-
+from models import *
 from download import download, get_exchange_rates
-from volatile import softplus, train, rate, estimate_logprice_statistics, estimate_price_statistics
+from volatile import rate, estimate_logprice_statistics, estimate_price_statistics
 from bots import *
 
 if __name__ == '__main__':
@@ -91,7 +91,7 @@ if __name__ == '__main__':
 
     print("\n*** LET'S THE BOT-TOURNAMENT BEGINS! ***\n")
     for j in range(num_days, 0, -1):
-        phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train(logp[:, -t - j:-j], info)
+        phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train_msis_mcs(logp[:, -t - j:-j], info)
 
         logp_est, std_logp_est = estimate_logprice_statistics(phi.numpy(), psi.numpy(), info['tt'])
         logp_pred, std_logp_pred = estimate_logprice_statistics(phi.numpy(), psi.numpy(), tt_pred)
