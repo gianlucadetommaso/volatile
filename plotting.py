@@ -187,10 +187,12 @@ def plot_stock_estimates(data: dict, est: np.array, std: np.array, rank_type: st
     # determine which stocks are along trend to avoid plotting them
     if rank_type == "rate":
         to_plot = np.where(np.array(ranked_rates) != "ALONG TREND")[0]
-    else:
+    elif rank_type == "growth":
         to_plot = np.where(np.array(ranked_rates) == "ALONG TREND")[0][:99]
-    dont_plot = [x for x in np.arange(num_stocks) if x not in to_plot]
+    elif rank_type == "volatility":
+        to_plot = np.arange(99)
     num_to_plot = len(to_plot)
+
     if num_to_plot > 0:
         print('\nPlotting stock estimation...')
         num_columns = 3
@@ -207,7 +209,7 @@ def plot_stock_estimates(data: dict, est: np.array, std: np.array, rank_type: st
         j = 0
         fig = plt.figure(figsize=(20, max(num_to_plot, 5)))
         for i in range(num_stocks):
-            if i not in dont_plot:
+            if i in to_plot:
                 j += 1
                 plt.subplot(int(np.ceil(num_to_plot / num_columns)), num_columns, j)
                 plt.grid(axis='both')
@@ -261,7 +263,6 @@ def plot_matches(data: dict, matches: dict):
     matched_idx = np.unique([{i, matches[tickers[i]]['index']} for i in idx]).tolist()[:num_to_plot]
 
     fig = plt.figure(figsize=(20, max(num_to_plot, 5)))
-    j = 0
     for j, couple in enumerate(matched_idx):
         i1, i2 = tuple(couple)
         ticker, match = tickers[i1], tickers[i2]

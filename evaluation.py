@@ -4,15 +4,39 @@ from models import *
 
 from copy import deepcopy
 
-def second_moment_loss(tt: np.array, mu: np.array, sigma: np.array, logp: np.array):
+def second_moment_loss(tt: np.array, mu: np.array, sigma: np.array, logp: np.array) -> float:
     """
-    Because log-price likelihood is Gaussian,
+    Because log-price likelihood is Gaussian, standardizing the test data should give a second moment (i.e. squared
+    expectation plus variance) of 1.
+
+    Parameters
+    ----------
+    tt: np.array
+        Array of times.
+    mu: np.array
+        Mean parameters.
+    sigma: np.array
+        Standard deviation parameters.
+    logp: np.array
+        Log-prices at stock-level.
     """
     est, std = estimate_logprice_statistics(mu, sigma, tt)
     scores = (est - logp) / std
     return np.abs(np.mean(scores ** 2) - 1)
 
-def negative_loglikelihood(model, params, logp):
+def negative_loglikelihood(model: tfd.JointDistributionSequentialAutoBatched, params: tuple, logp: np.array) -> float:
+    """
+    It returns the negative log-likelihood of the model.
+
+    Parameters
+    ----------
+    model: tfd.JointDistributionSequentialAutoBatched
+        Probabilistic model.
+    params: tuple
+        Parameters of the model.
+    logp: np.array
+        Log-prices at stock-level.
+    """
     return -model.log_prob_parts(list(params) + [logp])[-1].numpy()
 
 if __name__ == '__main__':

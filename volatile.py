@@ -190,7 +190,8 @@ if __name__ == '__main__':
     cli.add_argument('--rank', type=str, default="rate",
                      help="If `rate`, stocks are ranked in the prediction table and in the stock estimation plot from "
                           "the highest below to the highest above trend; if `growth`, ranking is done from the largest"
-                          " to the smallest trend growth at the last date.")
+                          " to the smallest trend growth at current date; if `volatility`, from the largest to the "
+                          "smallest current volatility estimate.")
     cli.add_argument('--save-table', action='store_true',
                      help='Save prediction table in csv format.')
     cli.add_argument('--no-plots', action='store_true',
@@ -199,7 +200,7 @@ if __name__ == '__main__':
                      help='Plot loss function decay over training iterations.')
     args = cli.parse_args()
 
-    if args.rank.lower() not in ["rate", "growth"]:
+    if args.rank.lower() not in ["rate", "growth", "volatility"]:
         raise Exception("{} not recognized. Please provide one between `rate` and `growth`.".format(args.rank))
 
     today = dt.date.today().strftime("%Y-%m-%d")
@@ -292,13 +293,23 @@ if __name__ == '__main__':
     # calculate market-level estimators of prices
     p_mkt_est, std_p_mkt_est = estimate_price_statistics(logp_mkt_est, std_logp_mkt_est)
 
+    # volatility
+    volatility = std_p_est[:, -1] / data['price'][:, -1]
+
     # rank according to score
-    rank = np.argsort(scores)[::-1] if args.rank == "rate" else np.argsort(growth)[::-1]
+    if args.rank == "rate":
+        rank = np.argsort(scores)[::-1]
+    elif args.rank == "growth":
+        rank = np.argsort(growth)[::-1]
+    elif args.rank == "volatility":
+        rank = np.argsort(volatility)[::-1]
+
     ranked_tickers = np.array(tickers)[rank]
     ranked_scores = scores[rank]
     ranked_p = data['price'][rank]
     ranked_currencies = np.array(data['currencies'])[rank]
     ranked_growth = growth[rank]
+    ranked_volatility = volatility[rank]
     ranked_matches = np.array([matches[ticker]["match"] for ticker in ranked_tickers])
 
     # rate stocks
@@ -315,16 +326,17 @@ if __name__ == '__main__':
     ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(list(data["sectors"].values()))[rank]]
     ranked_industries = [name if name[:2] != "NA" else "Not Available" for name in np.array(list(data["industries"].values()))[rank]]
 
-    strf = "{:<15} {:<26} {:<42} {:<16} {:<22} {:<11} {:<4}"
-    num_dashes = 143
+    strf = "{:<15} {:<26} {:<42} {:<16} {:<22} {:<11} {:<15} {:<4}"
+    num_dashes = 159
     separator = num_dashes * "-"
     print(num_dashes * "-")
-    print(strf.format("SYMBOL", "SECTOR", "INDUSTRY", "PRICE", "RATE", "GROWTH", "MATCH"))
+    print(strf.format("SYMBOL", "SECTOR", "INDUSTRY", "PRICE", "RATE", "GROWTH", "VOLATILITY", "MATCH"))
     print(separator)
     for i in range(num_stocks):
         print(strf.format(ranked_tickers[i], ranked_sectors[i], ranked_industries[i],
                           "{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]), ranked_rates[i],
                           "{}{}{}".format("+" if ranked_growth[i] >= 0 else "", np.round(100 * ranked_growth[i], 2), '%'),
+                          np.round(ranked_volatility[i], 2),
                           ranked_matches[i]))
         print(separator)
         if i < num_stocks - 1 and ranked_rates[i] != ranked_rates[i + 1]:
@@ -338,6 +350,7 @@ if __name__ == '__main__':
                     ["PRICE"] + ["{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]) for i in range(num_stocks)],
                     ["RATE"] + ranked_rates,
                     ["GROWTH"] + ranked_growth.tolist(),
+                    ["VOLATILITY"] + ranked_volatility.tolist(),
                     ["MATCH"] + ranked_matches.tolist())
 
         with open(tab_name, 'w') as file:
