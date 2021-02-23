@@ -5,15 +5,13 @@ import datetime as dt
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, SUPPRESS
 import csv
 import os.path
+import pickle
 
 from download import download
 from tools import convert_currency, extract_hierarchical_info
 from plotting import *
 from models import *
 
-import tensorflow as tf
-import tensorflow_probability as tfp
-from tensorflow_probability import distributions as tfd
 import multitasking
 
 def softplus(x: np.array) -> np.array:
@@ -120,6 +118,7 @@ def estimate_matches(tickers: list, mu: np.array, tt: np.array) -> dict:
     dtt = np.arange(1, tt.shape[0])[:, None] * tt[1:] / tt[1, None]
     dlogp_est = np.dot(mu[:, 1:],  dtt)
     num_stocks = len(tickers)
+
     try:
         assert num_stocks <= 2000
         match_dist = np.sum((dlogp_est[:, None] - dlogp_est[None]) ** 2, 2)
@@ -198,18 +197,28 @@ if __name__ == '__main__':
                      help='Plot estimates with their uncertainty over time.')
     cli.add_argument('--plot-losses', action='store_true',
                      help='Plot loss function decay over training iterations.')
+    cli.add_argument('--cache', action='store_true',
+                     help='Use cached data and parameters if available.')
     args = cli.parse_args()
 
     if args.rank.lower() not in ["rate", "growth", "volatility"]:
         raise Exception("{} not recognized. Please provide one between `rate` and `growth`.".format(args.rank))
 
-    today = dt.date.today().strftime("%Y-%m-%d")
+    if args.cache and os.path.exists('data.pickle'):
+        print('\nLoading last year of data...')
+        with open('data.pickle', 'rb') as handle:
+            data = pickle.load(handle)
+        print('Data has been saved to {}/{}.'.format(os.getcwd(), 'data.pickle'))
+    else:
+        if args.symbols is None:
+            with open("symbols_list.txt", "r") as my_file:
+                args.symbols = my_file.readlines()[0].split(" ")
+        print('\nDownloading last year of data...')
+        data = download(args.symbols)
 
-    print('\nDownloading all available closing prices in the last year...')
-    if args.symbols is None:
-        with open("symbols_list.txt", "r") as my_file:
-            args.symbols = my_file.readlines()[0].split(" ")
-    data = download(args.symbols)
+        with open('data.pickle', 'wb') as handle:
+            pickle.dump(data, handle)
+
     tickers = data["tickers"]
     logp = np.log(data['price'])
 
@@ -222,24 +231,25 @@ if __name__ == '__main__':
 
     info = extract_hierarchical_info(data['sectors'], data['industries'])
 
-    print("\nTraining a model that discovers correlations...")
-    # order of the polynomial
-    order = 52
+    if num_stocks > 1:
+        print("\nTraining a model that discovers correlations...")
+        # order of the polynomial
+        order = 52
 
-    # times corresponding to trading dates in the data
-    info['tt'] = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
-    # reweighing factors for parameters corresponding to different orders of the polynomial
-    info['order_scale'] = np.ones((1, order + 1), dtype='float32')
+        # times corresponding to trading dates in the data
+        info['tt'] = (np.linspace(1 / t, 1, t) ** np.arange(order + 1).reshape(-1, 1)).astype('float32')
+        # reweighing factors for parameters corresponding to different orders of the polynomial
+        info['order_scale'] = np.ones((1, order + 1), dtype='float32')
 
-    # train the model
-    phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train_msis_mcs(logp, info, num_steps=50000)
+        # train the model
+        phi_m, psi_m, phi_s, psi_s, phi_i, psi_i, phi, psi = train_msis_mcs(logp, info, num_steps=50000)
 
-    print("Training completed.")
+        print("Training completed.")
 
-    print("\nEstimate top matches...")
-    matches = estimate_matches(tickers, phi.numpy(), info['tt'])
+        print("\nEstimate top matches...")
+        matches = estimate_matches(tickers, phi.numpy(), info['tt'])
 
-    print("Top matches estimation completed.")
+        print("Top matches estimation completed.")
 
     print("\nTraining a model that estimates and predicts trends...")
     # how many days to look ahead when comparing the current price against a prediction
@@ -310,7 +320,8 @@ if __name__ == '__main__':
     ranked_currencies = np.array(data['currencies'])[rank]
     ranked_growth = growth[rank]
     ranked_volatility = volatility[rank]
-    ranked_matches = np.array([matches[ticker]["match"] for ticker in ranked_tickers])
+    if num_stocks > 1:
+        ranked_matches = np.array([matches[ticker]["match"] for ticker in ranked_tickers])
 
     # rate stocks
     ranked_rates = rate(ranked_scores)
@@ -320,7 +331,8 @@ if __name__ == '__main__':
         plot_sector_estimates(data, info, p_sec_est, std_p_sec_est)
         plot_industry_estimates(data, info, p_ind_est, std_p_ind_est)
         plot_stock_estimates(data, p_est, std_p_est, args.rank, rank, ranked_rates)
-        plot_matches(data, matches)
+        if num_stocks > 1:
+            plot_matches(data, matches)
 
     print("\nPREDICTION TABLE")
     ranked_sectors = [name if name[:2] != "NA" else "Not Available" for name in np.array(list(data["sectors"].values()))[rank]]
@@ -337,7 +349,7 @@ if __name__ == '__main__':
                           "{} {}".format(np.round(ranked_p[i, -1], 2), ranked_currencies[i]), ranked_rates[i],
                           "{}{}{}".format("+" if ranked_growth[i] >= 0 else "", np.round(100 * ranked_growth[i], 2), '%'),
                           np.round(ranked_volatility[i], 2),
-                          ranked_matches[i]))
+                          ranked_matches[i] if num_stocks > 1 else "None"))
         print(separator)
         if i < num_stocks - 1 and ranked_rates[i] != ranked_rates[i + 1]:
             print(separator)
@@ -351,7 +363,7 @@ if __name__ == '__main__':
                     ["RATE"] + ranked_rates,
                     ["GROWTH"] + ranked_growth.tolist(),
                     ["VOLATILITY"] + ranked_volatility.tolist(),
-                    ["MATCH"] + ranked_matches.tolist())
+                    ["MATCH"] + (ranked_matches.tolist() if num_stocks > 1 else ["None"]))
 
         with open(tab_name, 'w') as file:
             wr = csv.writer(file)
