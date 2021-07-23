@@ -167,15 +167,12 @@ def _download_one(ticker: str, start: int, end: int, interval: str = "1d") -> di
         Scraped dictionary of information.
     """
     base_url = 'https://query1.finance.yahoo.com'
-
     params = dict(period1=start, period2=end, interval=interval.lower(), includePrePost=False)
-
     url = "{}/v8/finance/chart/{}".format(base_url, ticker)
-    data = requests.get(url=url, params=params)
-
+    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'}
+    data = requests.get(url=url, params=params, headers=headers)
     if "Will be right back" in data.text:
         raise RuntimeError("*** YAHOO! FINANCE is currently down! ***\n")
-
     data = data.json()
     return data
 
