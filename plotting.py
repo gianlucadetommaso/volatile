@@ -283,3 +283,77 @@ def plot_matches(data: dict, matches: dict):
     fig_name = 'matches_estimation.png'
     print('Matches estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
     fig.savefig(fig_name, dpi=fig.dpi)
+
+def plot_stocks_set_exploration(data, est, std, idx_set, num_rows=3, num_cols=3):
+    tickers = data['tickers']
+    p = data['price']
+    currencies = data['currencies']
+    volume = data['volume']
+    lb, ub = compute_uncertainty_bounds(est, std)
+    t = p.shape[1]
+
+    plt.figure(figsize=(18, 7))
+    for i, idx in enumerate(idx_set):
+        plt.subplot(num_rows, num_cols, i + 1)
+        plt.grid(axis='both')
+        plt.title(tickers[idx], fontsize=15)
+        l1 = plt.plot(data["dates"], p[idx], label="price in {}".format(currencies[idx]))
+        plt.yticks(fontsize=12)
+        plt.xticks(rotation=45)
+        plt.ylabel("price in {}".format(currencies[idx]), fontsize=12)
+        l2 = plt.plot(data["dates"], est[idx], label="trend")
+        l3 = plt.fill_between(data["dates"], lb[idx], ub[idx], alpha=0.2, label="+/- 2 st. dev.")
+        plt.yticks(fontsize=12)
+        plt.xticks(rotation=45)
+        plt.ylabel("price in {}".format(currencies[idx]), fontsize=12)
+        plt.twinx()
+        l4 = plt.bar(data["dates"], volume[idx], width=1, color='g', alpha=0.2, label='volume')
+        for d in range(1, t):
+            if p[idx, d] - p[idx, d - 1] < 0:
+                l4[d].set_color('r')
+        l4[0].set_edgecolor('r')
+        plt.ylabel("volume", fontsize=12)
+        ll = l1 + l2 + [l3] + [l4]
+        labels = [l.get_label() for l in ll]
+        plt.legend(ll, labels, loc="upper left")
+    plt.tight_layout()
+    plt.subplots_adjust(wspace=0.5)
+    plt.show(block=False)
+
+def plot_chosen_stocks_exploration(data, est, std, idx_choice_all, num_cols=3):
+    tickers = data['tickers']
+    p = data['price']
+    currencies = data['currencies']
+    volume = data['volume']
+    lb, ub = compute_uncertainty_bounds(est, std)
+    t = p.shape[1]
+
+    num_to_plot = len(idx_choice_all)
+    fig = plt.figure(figsize=(20, max(num_to_plot, 5)))
+    for i, idx in enumerate(idx_choice_all):
+        plt.subplot(int(np.ceil(num_to_plot / num_cols)), num_cols, i+1)
+        plt.grid(axis='both')
+        plt.title(tickers[idx], fontsize=15)
+        l1 = plt.plot(data["dates"], p[idx], label="price in {}".format(currencies[idx]))
+        plt.yticks(fontsize=12)
+        plt.xticks(rotation=45)
+        plt.ylabel("price in {}".format(currencies[idx]), fontsize=12)
+        l2 = plt.plot(data["dates"], est[idx], label="trend")
+        l3 = plt.fill_between(data["dates"], lb[idx], ub[idx], alpha=0.2, label="+/- 2 st. dev.")
+        plt.yticks(fontsize=12)
+        plt.xticks(rotation=45)
+        plt.ylabel("price in {}".format(currencies[idx]), fontsize=12)
+        plt.twinx()
+        l4 = plt.bar(data["dates"], volume[idx], width=1, color='g', alpha=0.2, label='volume')
+        for d in range(1, t):
+            if p[idx, d] - p[idx, d - 1] < 0:
+                l4[d].set_color('r')
+        l4[0].set_edgecolor('r')
+        plt.ylabel("volume", fontsize=12)
+        ll = l1 + l2 + [l3] + [l4]
+        labels = [l.get_label() for l in ll]
+        plt.legend(ll, labels, loc="upper left")
+    plt.tight_layout()
+    fig_name = 'exploration_chosen_stocks.png'
+    print('Plot of the stocks chosen during the exploration has been saved to {}/{}.'.format(os.getcwd(), fig_name))
+    fig.savefig(fig_name, dpi=fig.dpi)
