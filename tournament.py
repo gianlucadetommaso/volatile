@@ -147,7 +147,10 @@ if __name__ == '__main__':
     plt.legend(names, loc="upper left", fontsize=12)
     plt.xticks(rotation=45)
     plt.ylabel("capital in {}".format(args.currency))
-    fig_name = 'tournament_capitals.png'
+
+    if not os.path.exists('plots'):
+        os.mkdir('plots')
+    fig_name = 'plots/tournament_capitals.png'
     fig.savefig(fig_name, dpi=fig.dpi)
     print('Plot of capitals over time has been saved in {}/{}.'.format(os.getcwd(), fig_name))
 
@@ -157,6 +160,9 @@ if __name__ == '__main__':
     plt.legend(names, loc="upper left", fontsize=12)
     plt.xticks(rotation=45)
     plt.ylabel("risk")
-    fig_name = 'tournament_risks.png'
+
+    if not os.path.exists('plots'):
+        os.mkdir('plots')
+    fig_name = 'plots/tournament_risks.png'
     fig.savefig(fig_name, dpi=fig.dpi)
     print('Plot of portfolio risk over time has been saved in {}/{}.'.format(os.getcwd(), fig_name))

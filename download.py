@@ -176,6 +176,7 @@ def _download_one(ticker: str, start: int, end: int, interval: str = "1d") -> di
     data = data.json()
     return data
 
+
 def _parse_quotes(data: dict, parse_volume: bool = True) -> pd.DataFrame:
     """
     It creates a data frame of adjusted closing prices, and, if `parse_volume=True`, volumes. If no adjusted closing
@@ -197,6 +198,11 @@ def _parse_quotes(data: dict, parse_volume: bool = True) -> pd.DataFrame:
         adjclose = data["indicators"]["adjclose"][0]["adjclose"]
     except:
         adjclose = closes
+
+    # fix NaNs in the second-last entry of adjusted closing prices
+    if adjclose[-2] is None:
+        adjclose[-2] = adjclose[-1]
+
     assert (np.array(adjclose) > 0).all()
 
     quotes = {"Adj Close": adjclose}

@@ -2,8 +2,10 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 def compute_uncertainty_bounds(est: np.array, std: np.array):
     return np.maximum(0, est - 2 * std), est + 2 * std
+
 
 def plot_market_estimates(data: dict, est: np.array, std: np.array):
     """
@@ -41,9 +43,13 @@ def plot_market_estimates(data: dict, est: np.array, std: np.array):
     ll = l1 + l2 + [l3] + [l4]
     labels = [l.get_label() for l in ll]
     plt.legend(ll, labels, loc="upper left")
-    fig_name = 'market_estimation.png'
+
+    if not os.path.exists('plots'):
+        os.mkdir('plots')
+    fig_name = 'plots/market_estimation.png'
     fig.savefig(fig_name, dpi=fig.dpi)
     print('Market estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
+
 
 def plot_sector_estimates(data: dict, info: dict, est: np.array, std: np.array):
     """
@@ -98,11 +104,14 @@ def plot_sector_estimates(data: dict, info: dict, est: np.array, std: np.array):
             ll = l1 + l2 + [l3] + [l4]
             labels = [l.get_label() for l in ll]
             plt.legend(ll, labels, loc="upper left")
-    
     plt.tight_layout()
-    fig_name = 'sector_estimation.png'
+
+    if not os.path.exists('plots'):
+        os.mkdir('plots')
+    fig_name = 'plots/sector_estimation.png'
     fig.savefig(fig_name, dpi=fig.dpi)
     print('Sector estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
+
 
 def plot_industry_estimates(data: dict, info: dict, est: np.array, std: np.array):
     """
@@ -159,9 +168,13 @@ def plot_industry_estimates(data: dict, info: dict, est: np.array, std: np.array
             labels = [l.get_label() for l in ll]
             plt.legend(ll, labels, loc="upper left")
     plt.tight_layout()
-    fig_name = 'industry_estimation.png'
+
+    if not os.path.exists('plots'):
+        os.mkdir('plots')
+    fig_name = 'plots/industry_estimation.png'
     fig.savefig(fig_name, dpi=fig.dpi)
     print('Industry estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
+
 
 def plot_stock_estimates(data: dict, est: np.array, std: np.array, rank_type: str, rank: list, ranked_rates: np.array):
     """
@@ -232,12 +245,16 @@ def plot_stock_estimates(data: dict, est: np.array, std: np.array, rank_type: st
                 labels = [l.get_label() for l in ll]
                 plt.legend(ll, labels, loc="upper left")
         plt.tight_layout()
-        fig_name = 'stock_estimation.png'
+
+        if not os.path.exists('plots'):
+            os.mkdir('plots')
+        fig_name = 'plots/stock_estimation.png'
         fig.savefig(fig_name, dpi=fig.dpi)
         print('Stock estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
 
-    elif os.path.exists('stock_estimation.png'):
-        os.remove('stock_estimation.png')
+    elif os.path.exists('plots/stock_estimation.png'):
+        os.remove('plots/stock_estimation.png')
+
 
 def plot_matches(data: dict, matches: dict):
     """
@@ -280,9 +297,12 @@ def plot_matches(data: dict, matches: dict):
         plt.legend(ll, labels, loc="upper left")
     plt.tight_layout()
 
-    fig_name = 'matches_estimation.png'
+    if not os.path.exists('plots'):
+        os.mkdir('plots')
+    fig_name = 'plots/matches_estimation.png'
     print('Matches estimation plot has been saved to {}/{}.'.format(os.getcwd(), fig_name))
     fig.savefig(fig_name, dpi=fig.dpi)
+
 
 def plot_stocks_set_exploration(data, est, std, idx_set, num_rows=3, num_cols=3):
     tickers = data['tickers']
@@ -320,6 +340,7 @@ def plot_stocks_set_exploration(data, est, std, idx_set, num_rows=3, num_cols=3)
     plt.subplots_adjust(wspace=0.5)
     plt.show(block=False)
 
+
 def plot_chosen_stocks_exploration(data, est, std, idx_choice_all, num_cols=3):
     tickers = data['tickers']
     p = data['price']
@@ -354,6 +375,9 @@ def plot_chosen_stocks_exploration(data, est, std, idx_choice_all, num_cols=3):
         labels = [l.get_label() for l in ll]
         plt.legend(ll, labels, loc="upper left")
     plt.tight_layout()
-    fig_name = 'exploration_chosen_stocks.png'
+
+    if not os.path.exists('plots'):
+        os.mkdir('plots')
+    fig_name = 'plots/exploration_chosen_stocks.png'
     print('Plot of the stocks chosen during the exploration has been saved to {}/{}.'.format(os.getcwd(), fig_name))
     fig.savefig(fig_name, dpi=fig.dpi)
