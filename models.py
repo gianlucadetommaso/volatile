@@ -156,7 +156,7 @@ def train_msis_mcs(logp: np.array, info: dict, learning_rate: float = 0.01, num_
     -------
     It returns a tuple of trained parameters.
     """
-    optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
+    optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate)
     num_steps_l = int(np.ceil(num_steps // 4))
 
     # market
