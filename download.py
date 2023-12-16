@@ -58,7 +58,7 @@ def download(tickers: list, start: Union[str, int] = None, end: Union[str, int] 
     elif type(end) is str:
         end = int(dt.datetime.timestamp(dt.datetime.strptime(end, '%Y-%m-%d')))
     if start is None:
-        start = int(dt.datetime.timestamp(dt.datetime.today() - dt.timedelta(365)))
+        start = int(dt.datetime.timestamp(dt.datetime.today() - dt.timedelta(915)))
     elif type(start) is str:
         start = int(dt.datetime.timestamp(dt.datetime.strptime(start, '%Y-%m-%d')))
 
@@ -246,7 +246,7 @@ def get_exchange_rates(from_currencies: list, to_currency: str, dates: pd.Index,
     elif type(end) is str:
         end = int(dt.datetime.timestamp(dt.datetime.strptime(end, '%Y-%m-%d')))
     if start is None:
-        start = int(dt.datetime.timestamp(dt.datetime.today() - dt.timedelta(365)))
+        start = int(dt.datetime.timestamp(dt.datetime.today() - dt.timedelta(915)))
     elif type(start) is str:
         start = int(dt.datetime.timestamp(dt.datetime.strptime(start, '%Y-%m-%d')))
 
