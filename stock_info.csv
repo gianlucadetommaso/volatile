@@ -1,31 +1,31 @@
-SYMBOL,CURRENCY,SECTOR
-MMM,USD,Conglomerate
-AXP,USD,Financial services
-AMGN,USD,Biopharmaceutical
-AAPL,USD,Information technology
-BA,USD,Aerospace and defense
-CAT,USD,Construction and mining
-CVX,USD,Petroleum industry
-CSCO,USD,Information technology
-KO,USD,Drink industry
-DIS,USD,Broadcasting and entertainment
-DOW,USD,Chemical industry
-GS,USD,Financial services
-HD,USD,Home Improvement
-HON,USD,Conglomerate
-IBM,USD,Information technology
-INTC,USD,Semiconductor industry
-JNJ,USD,Pharmaceutical industry
-JPM,USD,Financial services
-MCD,USD,Food industry
-MRK,USD,Pharmaceutical industry
-MSFT,USD,Information technology
-NKE,USD,Clothing industry
-PG,USD,Fast-moving consumer goods
-CRM,USD,Information technology
-TRV,USD,Insurance
-UNH,USD,Managed health care
-VZ,USD,Telecommunications industry
-V,USD,Financial services
-WBA,USD,Retailing
-WMT,USD,Retailing
+SYMBOL,CURRENCY,SECTOR,INDUSTRY
+MMM,USD,Conglomerate,Industry
+AXP,USD,Financial services,Industry
+AMGN,USD,Biopharmaceutical,Industry
+AAPL,USD,Information technology,Industry
+BA,USD,Aerospace and defense,Industry
+CAT,USD,Construction and mining,Industry
+CVX,USD,Petroleum industry,Industry
+CSCO,USD,Information technology,Industry
+KO,USD,Drink industry,Industry
+DIS,USD,Broadcasting and entertainment,Industry
+DOW,USD,Chemical industry,Industry
+GS,USD,Financial services,Industry
+HD,USD,Home Improvement,Industry
+HON,USD,Conglomerate,Industry
+IBM,USD,Information technology,Industry
+INTC,USD,Semiconductor industry,Industry
+JNJ,USD,Pharmaceutical industry,Industry
+JPM,USD,Financial services,Industry
+MCD,USD,Food industry,Industry
+MRK,USD,Pharmaceutical industry,Industry
+MSFT,USD,Information technology,Industry
+NKE,USD,Clothing industry,Industry
+PG,USD,Fast-moving consumer goods,Industry
+CRM,USD,Information technology,Industry
+TRV,USD,Insurance,Industry
+UNH,USD,Managed health care,Industry
+VZ,USD,Telecommunications industry,Industry
+V,USD,Financial services,Industry
+WBA,USD,Retailing,Industry
+WMT,USD,Retailing,Industry
