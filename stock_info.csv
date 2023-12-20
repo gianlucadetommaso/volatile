@@ -1,2 +1,4 @@
 SYMBOL,CURRENCY,SECTOR,INDUSTRY
 SPY,USD,Indice,Market
+QQQ,USD,Indice,Tech
+DIA,USD,Indice,Large Cap
